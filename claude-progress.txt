@@ -1,0 +1,18 @@
+# Claude Progress — 智能电商推荐系统
+
+## 项目状态：Initializer 完成，等待 Feature 1 开始
+
+## 已完成
+- [2026-04-12] Initializer 阶段：App Spec 定稿，feature_list.json 拆解完成（12 个 feature），init.sh 就绪
+
+## 当前阻塞
+（无）
+
+## 关键决策记录
+- LLM 只用于文案生成 + 可选重排（通过 A/B 开关），不参与主推荐决策
+- 库存校验为关键链路（强校验 + 缓存兜底），文案为可降级链路
+- 首期外部服务（Redis/Milvus）用 mock，后续按需接入真实服务
+- 演示环境使用模拟点击数据验证 A/B 效果
+
+## 下一步
+- 开始 Feature F01：项目骨架（FastAPI + 目录结构 + 配置系统）
