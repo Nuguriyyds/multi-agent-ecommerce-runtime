@@ -21,7 +21,7 @@
       "name": "Base Agent 框架",
       "description": "Agent 基类，包含执行循环、重试（指数退避）、超时控制、降级返回默认结果",
       "priority": 2,
-      "status": "pending",
+      "status": "done",
       "depends_on": ["F01"],
       "acceptance_criteria": [
         "pytest tests/test_base_agent.py 全部通过",
