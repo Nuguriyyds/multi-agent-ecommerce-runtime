@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>V3 Main-Agent Playground</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Helvetica Neue", Helvetica, Arial, "Hiragino Sans GB", "Microsoft YaHei",
+      sans-serif;
+    color: #1f2328;
+    background: #f6f8fa;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 24px;
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  header .sub { font-size: 12px; color: #6b7280; }
+  header .session-chip {
+    margin-left: auto;
+    font-size: 11px;
+    color: #6b7280;
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+    background: #f3f4f6;
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    min-height: 0;
+  }
+  .chat-pane {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e5e7eb;
+    background: #ffffff;
+    min-width: 0;
+  }
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .msg { max-width: 80%; display: flex; flex-direction: column; gap: 4px; }
+  .msg .role {
+    font-size: 11px;
+    color: #6b7280;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .msg .bubble {
+    padding: 10px 14px;
+    border-radius: 10px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 14px;
+  }
+  .msg.user { align-self: flex-end; }
+  .msg.user .bubble {
+    background: #0969da;
+    color: white;
+  }
+  .msg.user .role { text-align: right; }
+  .msg.assistant .bubble {
+    background: #f3f4f6;
+    color: #1f2328;
+    border: 1px solid #e5e7eb;
+  }
+  .msg.assistant.fallback .bubble {
+    background: #fef3c7;
+    border-color: #fcd34d;
+  }
+  .msg.assistant.clarification .bubble {
+    background: #e0f2fe;
+    border-color: #bae6fd;
+  }
+  .msg.assistant .status-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+  }
+  .status-tag.reply { background: #dcfce7; color: #166534; }
+  .status-tag.clarification { background: #e0f2fe; color: #075985; }
+  .status-tag.fallback { background: #fef3c7; color: #92400e; }
+  .input-area {
+    padding: 16px 24px;
+    border-top: 1px solid #e5e7eb;
+    background: #fafbfc;
+    display: flex;
+    gap: 10px;
+  }
+  .input-area textarea {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: none;
+    height: 44px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input-area textarea:focus { border-color: #0969da; }
+  .input-area button {
+    padding: 0 20px;
+    background: #0969da;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .input-area button:hover:not(:disabled) { background: #0550ae; }
+  .input-area button:disabled { background: #9ca3af; cursor: not-allowed; }
+  .quick-chips {
+    padding: 0 24px 10px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 10px;
+    background: #fafbfc;
+  }
+  .quick-chips .chip {
+    font-size: 12px;
+    padding: 4px 10px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    cursor: pointer;
+    color: #374151;
+    transition: all 0.15s;
+  }
+  .quick-chips .chip:hover {
+    border-color: #0969da;
+    color: #0969da;
+  }
+  .trace-pane {
+    background: #fafbfc;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .trace-pane h2 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: #1f2328;
+    letter-spacing: 0.3px;
+  }
+  .trace-pane .hint {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 16px;
+    padding: 10px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    line-height: 1.5;
+  }
+  .turn-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .turn-card .turn-header {
+    background: #f9fafb;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .turn-card .turn-body { padding: 10px 12px; font-size: 12px; }
+  .trace-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px dashed #f3f4f6;
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+    font-size: 11.5px;
+    color: #374151;
+  }
+  .trace-row:last-child { border-bottom: none; }
+  .trace-row .kind {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .kind.decision { background: #eff6ff; color: #1e40af; }
+  .kind.invocation { background: #f0fdf4; color: #166534; }
+  .kind.invocation.failed { background: #fef2f2; color: #991b1b; }
+  .kind.observation { background: #faf5ff; color: #6b21a8; }
+  .kind.fallback { background: #fef3c7; color: #92400e; }
+  .kind.terminal { background: #f3f4f6; color: #374151; }
+  .trace-row .text { flex: 1; word-break: break-all; }
+  .trace-row .meta { color: #9ca3af; font-size: 10.5px; }
+  footer {
+    padding: 10px 24px;
+    background: #ffffff;
+    border-top: 1px solid #e5e7eb;
+    font-size: 11px;
+    color: #9ca3af;
+    text-align: center;
+  }
+  footer a { color: #0969da; text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>V3 Main-Agent Playground</h1>
+  <span class="sub">中心化多 Agent 电商导购</span>
+  <span class="session-chip" id="sessionChip">连接中…</span>
+</header>
+<main>
+  <section class="chat-pane">
+    <div class="messages" id="messages"></div>
+    <div class="quick-chips">
+      <span class="chip" data-text="帮我看看 3000 左右的降噪耳机">🎧 3000 降噪耳机 (1/2)</span>
+      <span class="chip" data-text="通勤用，不要 Beats">🚉 通勤不要 Beats (2/2)</span>
+      <span class="chip" data-text="帮我选个礼物">🎁 多轮澄清起手</span>
+      <span class="chip" data-text="就这个了，帮我下单">🚫 业务边界 fallback</span>
+    </div>
+    <div class="input-area">
+      <textarea id="input" placeholder="和 Main Agent 对话,右栏会实时显示多步决策和 tool 调用…" rows="1"></textarea>
+      <button id="send">发送</button>
+    </div>
+  </section>
+  <aside class="trace-pane">
+    <h2>Turn Trace</h2>
+    <div class="hint">右栏展示 Main Agent 在每个 turn 的完整决策链:决策 → Gate 校验 → Tool / Sub-Agent 调用 → Observation → 终态。所有数据来自 <code>GET /api/v3/sessions/&lt;id&gt;/turns/&lt;n&gt;/trace</code>。</div>
+    <div id="traceArea"></div>
+  </aside>
+</main>
+<footer>
+  V3 Playground · <a href="/docs" target="_blank">OpenAPI Docs</a> · <a href="/health" target="_blank">/health</a>
+</footer>
+
+<script>
+const API_BASE = window.location.origin;
+const messagesEl = document.getElementById('messages');
+const traceEl = document.getElementById('traceArea');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const sessionChip = document.getElementById('sessionChip');
+
+let sessionId = null;
+let turnCount = 0;
+
+async function initSession() {
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    sessionId = data.session_id;
+    sessionChip.textContent = sessionId;
+    appendAssistantMessage(
+      '你好!我是 V3 Main Agent,专注 1500-3000 元价位的通勤 / 降噪耳机导购。你可以说预算、使用场景或品牌偏好,我会多步推理后给出候选和理由。',
+      'reply'
+    );
+  } catch (e) {
+    sessionChip.textContent = '连接失败';
+    appendSystemMessage(`Session 创建失败: ${e.message}`);
+  }
+}
+
+function appendUserMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  div.innerHTML = `<span class="role">你</span><div class="bubble"></div>`;
+  div.querySelector('.bubble').textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function appendAssistantMessage(text, status) {
+  const div = document.createElement('div');
+  div.className = `msg assistant ${status || 'reply'}`;
+  div.innerHTML = `
+    <span class="role">Main Agent <span class="status-tag ${status}">${status}</span></span>
+    <div class="bubble"></div>`;
+  div.querySelector('.bubble').textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function appendSystemMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.innerHTML = `<span class="role">SYSTEM</span><div class="bubble"></div>`;
+  div.querySelector('.bubble').textContent = text;
+  div.querySelector('.bubble').style.background = '#fee2e2';
+  div.querySelector('.bubble').style.borderColor = '#fca5a5';
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+async function sendMessage(text) {
+  if (!sessionId) return;
+  if (!text.trim()) return;
+
+  appendUserMessage(text);
+  inputEl.value = '';
+  sendBtn.disabled = true;
+  sendBtn.textContent = '思考中…';
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${err}`);
+    }
+    const result = await resp.json();
+    turnCount = result.turn_number;
+    appendAssistantMessage(result.message, result.status);
+    await loadTrace(turnCount);
+  } catch (e) {
+    appendSystemMessage(`请求失败: ${e.message}`);
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = '发送';
+  }
+}
+
+async function loadTrace(turn) {
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions/${sessionId}/turns/${turn}/trace`);
+    if (!resp.ok) return;
+    const trace = await resp.json();
+    prependTraceCard(turn, trace);
+  } catch (e) {
+    console.error('Trace fetch failed', e);
+  }
+}
+
+function prependTraceCard(turn, trace) {
+  const card = document.createElement('div');
+  card.className = 'turn-card';
+
+  const terminalClass = trace.terminal_state || 'reply';
+  const fallbackLine = trace.fallback_reason
+    ? `<div class="trace-row"><span class="kind fallback">FALLBACK</span><span class="text">${escapeHtml(trace.fallback_reason)}</span></div>`
+    : '';
+  const guardrailLines = (trace.guardrail_hits || []).map(h =>
+    `<div class="trace-row"><span class="kind fallback">GATE</span><span class="text">${escapeHtml(h)}</span></div>`
+  ).join('');
+
+  const decisionLines = (trace.decisions || []).map((d, i) => {
+    const kind = (d.action && d.action.kind) || 'unknown';
+    const note = d.action && (d.action.message || d.action.tool_id || d.action.sub_agent_id || d.action.reason || '');
+    return `<div class="trace-row">
+      <span class="kind decision">DECIDE</span>
+      <span class="text"><b>${i + 1}.</b> ${escapeHtml(kind)}${note ? ' · ' + escapeHtml(String(note)) : ''}</span>
+    </div>`;
+  }).join('');
+
+  const invocationLines = (trace.invocations || []).map(inv => {
+    const failed = inv.status === 'failed';
+    const kindCls = `invocation${failed ? ' failed' : ''}`;
+    const argSummary = inv.arguments && Object.keys(inv.arguments).length
+      ? ` (${Object.keys(inv.arguments).slice(0, 3).join(', ')})`
+      : '';
+    return `<div class="trace-row">
+      <span class="kind ${kindCls}">${inv.capability_kind.toUpperCase()}</span>
+      <span class="text">${escapeHtml(inv.capability_name)}${escapeHtml(argSummary)} <span class="meta">→ ${escapeHtml(inv.status)}</span></span>
+    </div>`;
+  }).join('');
+
+  const obsCount = (trace.observations || []).length;
+  const obsLine = obsCount > 0
+    ? `<div class="trace-row"><span class="kind observation">OBS</span><span class="text">${obsCount} observation(s) recorded</span></div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="turn-header">Turn ${turn} · trace: ${trace.trace_id ? trace.trace_id.slice(0, 8) : '—'}</div>
+    <div class="turn-body">
+      ${decisionLines}
+      ${invocationLines}
+      ${obsLine}
+      ${guardrailLines}
+      ${fallbackLine}
+      <div class="trace-row"><span class="kind terminal">END</span><span class="text">terminal_state: <b>${escapeHtml(terminalClass)}</b></span></div>
+    </div>
+  `;
+  traceEl.insertBefore(card, traceEl.firstChild);
+}
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+sendBtn.addEventListener('click', () => sendMessage(inputEl.value));
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage(inputEl.value);
+  }
+});
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => sendMessage(chip.dataset.text));
+});
+
+initSession();
+</script>
+</body>
+</html>

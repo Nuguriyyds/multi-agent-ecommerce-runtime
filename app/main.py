@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.v3.api import install_v3_api
 from app.v3.config import Settings, get_settings
+
+_WEB_DIR = Path(__file__).parent / "v3" / "api" / "web"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -22,6 +27,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "status": "ok",
             "workspace": "v3",
         }
+
+    if _WEB_DIR.is_dir():
+        application.mount(
+            "/ui",
+            StaticFiles(directory=str(_WEB_DIR), html=True),
+            name="v3-ui",
+        )
 
     return application
 

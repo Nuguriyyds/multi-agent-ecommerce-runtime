@@ -72,6 +72,18 @@ class LLMClient:
         if self._owns_http_client:
             await self._http_client.aclose()
 
+    def install_mock_responses(
+        self,
+        mock_responses: Mapping[str, Sequence[MockDecisionPayload] | MockDecisionPayload],
+    ) -> None:
+        self._mock_responses = {
+            key: self._normalize_sequence(value)
+            for key, value in mock_responses.items()
+        }
+        self._mock_cursors.clear()
+        self.prompt_history.clear()
+        self.scenario_history.clear()
+
     async def _complete_remote(self, prompt: str) -> str:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
