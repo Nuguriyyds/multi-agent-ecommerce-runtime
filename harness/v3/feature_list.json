@@ -1,0 +1,453 @@
+{
+  "project": "multi-agent-ecommerce-system",
+  "version": "V3.0",
+  "created": "2026-04-18",
+  "updated": "2026-04-18",
+  "source": "docs/app_spec.md",
+  "architecture_note": "V3 是全新中心化 Main-Agent 平台。与 archive/legacy-v1-v2/ 的 V1 DAG / V2 ShoppingManager 完全解耦，不复用 BaseAgent。",
+  "field_guide": {
+    "scope": "本 feature 要做的模块 / 类 / 方法（边界）",
+    "acceptance_criteria": "验收硬标准（做到没做到）",
+    "spec_reference": "docs/app_spec.md 中该 feature 的权威章节，coding 前必读",
+    "validation_refs": "该 feature 对应的确定性验证入口 ID；去 harness/v3/validation_matrix.json 查命令",
+    "implementation_notes": "关键 feature 的设计约束提示，防止 vibe 出偏"
+  },
+  "features": [
+    {
+      "id": "V3-F01",
+      "name": "工程骨架 + V3 目录 + 配置",
+      "description": "建立 app/v3/ 完整子目录结构、pydantic-settings 配置（前缀 ECOV3_）、V3 app factory（保留 /health）、requirements.txt 增补",
+      "priority": 1,
+      "size": "S",
+      "risk": "low",
+      "status": "done",
+      "depends_on": [],
+      "spec_reference": "docs/app_spec.md §4 Scope（确认 V3.0 范围）+ §13 Non-Functional Requirements",
+      "validation_refs": ["V3-F01-PYTEST"],
+      "scope": [
+        "创建 app/v3/{config,models,registry,memory,prompts,hooks,permissions,hardening,runtime,agents,specialists,tools,api}/__init__.py（已在 Initializer 阶段就位，本 feature 填实现）",
+        "app/v3/config/settings.py 定义 Settings: openai_api_key / openai_base_url / openai_model / app_host / app_port / app_debug / session_max_turns=20 / session_idle_minutes=30 / max_steps=8 / mcp_mock_enabled=true",
+        "app/main.py 改为 app factory，mount 各 router（当前只有 /health）",
+        "requirements.txt 追加 pydantic-settings>=2.6.0, httpx>=0.27.0, pytest-asyncio>=0.23.0"
+      ],
+      "acceptance_criteria": [
+        "pip install -r requirements.txt 无报错",
+        "pytest tests/v3/test_f01_skeleton.py 通过（导入所有模块 + /health 路径存在 + Settings 可读）",
+        "uvicorn app.main:app --port 8000 启动成功，curl /health 返回 {\"status\":\"ok\",\"workspace\":\"v3\"}"
+      ]
+    },
+    {
+      "id": "V3-F02",
+      "name": "核心 Pydantic 类型库",
+      "description": "把 spec §10 列出的 ~32 个核心类型全部建模，后续 feature 直接引用。Action 用 discriminated union（基于 kind 字段）",
+      "priority": 2,
+      "size": "M",
+      "risk": "low",
+      "status": "done",
+      "depends_on": ["V3-F01"],
+      "spec_reference": "docs/app_spec.md §10 Public Interfaces + Core Types（type 清单权威来源）",
+      "validation_refs": ["V3-F02-PYTEST"],
+      "scope": [
+        "app/v3/models/session.py: SessionState, LoopState, ContextPacket, TurnResult",
+        "app/v3/models/trace.py: TraceRecord, InvocationRecord",
+        "app/v3/models/task.py: TurnTaskBoard, TurnTask, TaskStatus (Enum: pending/ready/running/done/failed/blocked)",
+        "app/v3/models/memory.py: MemoryEntry（必带 source: Literal['user_confirmed','inferred','tool_fact']），MemoryWriteDecision",
+        "app/v3/models/decision.py: AgentDecision, Action (discriminated union with kind: reply_to_user/ask_clarification/call_tool/call_sub_agent/fallback), Observation, HardeningGateResult",
+        "app/v3/models/capability.py: CapabilityDescriptor, CapabilityKind（tool/sub_agent/mcp_tool）",
+        "app/v3/models/team.py: AgentTeam, TeamTask, SpecialistBrief, SpecialistObservation",
+        "app/v3/models/hooks.py: HookPoint, HookEvent, HookResult",
+        "app/v3/models/permissions.py: PermissionPolicy, PermissionDecision",
+        "app/v3/models/prompts.py: PromptLayer",
+        "app/v3/models/errors.py: ErrorCategory, RetryPolicy, LLMErrorObservation",
+        "预留 stub（最小字段，V3.0 不启用）：SchedulePolicy, SkillDefinition, PluginManifest, BackgroundTask"
+      ],
+      "acceptance_criteria": [
+        "每个类型至少一个 roundtrip 测试（model_dump_json → model_validate_json 保值）",
+        "Action discriminated union 从 JSON 能正确分派到 5 种子类",
+        "pytest tests/v3/test_f02_models.py 全绿，覆盖 ≥32 类型"
+      ]
+    },
+    {
+      "id": "V3-F03",
+      "name": "Capability Registry + Provider 抽象（含 MCP）",
+      "description": "工具 + 子 Agent 的统一注册/发现/权限 metadata；同时定义 MCPProvider 抽象为 F12 的真实 MCP 客户端实现做接口",
+      "priority": 3,
+      "size": "S",
+      "risk": "low",
+      "status": "done",
+      "depends_on": ["V3-F02"],
+      "spec_reference": "docs/app_spec.md §6.1 Capability Registry + §9 Extension Model（Provider / MCP / Plugins）",
+      "validation_refs": ["V3-F03-PYTEST"],
+      "scope": [
+        "app/v3/registry/capability_registry.py: CapabilityRegistry.register/get/list(kind)",
+        "app/v3/registry/providers.py:",
+        "  - ToolProvider (ABC): invoke(args: dict) -> Observation",
+        "  - SubAgentProvider (ABC): invoke(brief: SpecialistBrief) -> SpecialistObservation",
+        "  - MCPProvider (ABC, 继承 ToolProvider): 声明 invoke 语义对齐 MCP tools.call；V3.0 不写具体实现，留给 F12",
+        "每个 CapabilityDescriptor 携带 name / kind / input_schema / output_schema / timeout / permission_tag"
+      ],
+      "acceptance_criteria": [
+        "注册 2 个 mock tool + 1 个 mock specialist，list(kind=tool) 返回 2 个，list(kind=specialist) 返回 1 个",
+        "重复注册抛 CapabilityAlreadyRegistered",
+        "MCPProvider 抽象类存在且 isinstance(instance, ToolProvider) 为 True（接口兼容）",
+        "pytest tests/v3/test_f03_registry.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F04",
+      "name": "Hook System",
+      "description": "7 个 HookPoint 的 pub-sub 系统；提前到 F05 前避免后期倒插 emit 点",
+      "priority": 4,
+      "size": "S",
+      "risk": "low",
+      "status": "done",
+      "depends_on": ["V3-F02"],
+      "spec_reference": "docs/app_spec.md §6.7 Hook System",
+      "validation_refs": ["V3-F04-PYTEST"],
+      "scope": [
+        "app/v3/hooks/hook_bus.py: HookBus.register(point, handler) / emit(point, event)",
+        "HookPoint 枚举：turn_start, decision, task, invocation, memory_write, fallback, turn_end",
+        "handler 只读：handler 修改 event 字段时记 warning，不抛异常（spec §6.7 hook 不改写用户回复）",
+        "handler 抛异常时隔离（记 error log，其他 handler 继续执行）"
+      ],
+      "acceptance_criteria": [
+        "注册 3 个 handler，emit 一次，三者按注册顺序被调用",
+        "handler 抛异常不影响其他 handler 继续执行",
+        "pytest tests/v3/test_f04_hooks.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F05",
+      "name": "两层 Memory 系统",
+      "description": "session 工作记忆 + 用户级 durable 记忆，写入受 MemoryWriteDecision 门禁",
+      "priority": 5,
+      "size": "M",
+      "risk": "medium",
+      "risk_note": "推断 vs 确认分类界限模糊。起步只识别 source=user_confirmed 的显式标记，其余全拒；逐步放宽",
+      "status": "done",
+      "depends_on": ["V3-F02", "V3-F04"],
+      "spec_reference": "docs/app_spec.md §6.3 Memory Hardening",
+      "validation_refs": ["V3-F05-PYTEST"],
+      "scope": [
+        "app/v3/memory/session_memory.py: SessionMemory（按 session_id 隔离的 dict，get_view(keys) 返回只读快照）",
+        "app/v3/memory/durable_memory.py: DurableMemory（in-memory mock，key 按 user_id:field）",
+        "app/v3/memory/write_decision.py: MemoryWriteDecision.evaluate(entry) -> allow | deny(reason)",
+        "规则：entry.source=user_confirmed → 允许写 durable；entry.source∈{inferred, tool_fact} → 拒绝写 durable（可写 session）",
+        "所有写操作 emit memory_write hook"
+      ],
+      "implementation_notes": [
+        "MemoryEntry 必带 source 字段（V3-F02 已定义）；DurableMemory 写入前必过 MemoryWriteDecision.evaluate",
+        "SessionMemory 的 get_view() 用 types.MappingProxyType 包装返回值保证只读",
+        "跨 session 隔离：内部存储用 dict[session_id -> dict[key -> value]]，不用 flat key",
+        "V3.0 不做推断分类器；只判 source 字段的字面值"
+      ],
+      "acceptance_criteria": [
+        "source=user_confirmed 的 budget entry 写 durable 成功",
+        "source=inferred 的偏好写 durable 被拒，reason 非空",
+        "SessionMemory 跨 session 隔离（不同 session_id 看不到彼此数据）",
+        "SessionMemory.get_view() 返回只读快照（修改抛 TypeError）",
+        "pytest tests/v3/test_f05_memory.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F06",
+      "name": "Prompt Registry（分层）",
+      "description": "4 层 system prompt 组装：platform > scenario > role > task_brief，支持版本化管理",
+      "priority": 6,
+      "size": "S",
+      "risk": "low",
+      "status": "done",
+      "depends_on": ["V3-F02"],
+      "spec_reference": "docs/app_spec.md §6.8 System Prompt（4 层 + 优先级）",
+      "validation_refs": ["V3-F06-PYTEST"],
+      "scope": [
+        "app/v3/prompts/registry.py: PromptRegistry.register(layer, name, version, text) / assemble(context) -> str",
+        "优先级：platform 最高（保留所有原文），下层 prompt 受上层约束",
+        "版本管理：同名多版本共存，默认取 latest，可按 (name, version) 精确取",
+        "assemble 顺序：platform → scenario → role → task_brief，按 section 拼接"
+      ],
+      "acceptance_criteria": [
+        "注册 4 层各一个 prompt，assemble() 按顺序拼接",
+        "同名不同版本共存，默认取 latest",
+        "按 (name, version) 精确取指定版本",
+        "pytest tests/v3/test_f06_prompts.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F07",
+      "name": "Permission + Hardening Gate",
+      "description": "运行时硬化 — 动作合法性、schema 校验、证据规则、业务边界。gate 失败即 fallback，不走 LLM",
+      "priority": 7,
+      "size": "M",
+      "risk": "high",
+      "risk_note": "evidence rule 和 business boundary 在 spec 里欠具体。起步只要求 reply 里所有 claim 都能 map 到 observation_id，不做语义级校验",
+      "status": "done",
+      "depends_on": ["V3-F02", "V3-F03", "V3-F04"],
+      "spec_reference": "docs/app_spec.md §6.5 Evidence/Fact Hardening + §6.6 Execution Control + §6.7 Permission System + §6.4 Business Boundary",
+      "validation_refs": ["V3-F07-PYTEST"],
+      "scope": [
+        "app/v3/permissions/policy.py: PermissionPolicy.check(actor, capability) -> PermissionDecision",
+        "app/v3/hardening/gate.py: HardeningGate 四道检查",
+        "  1. Action whitelist: 只允许 5 种 action，且与当前 task 节点匹配",
+        "  2. Schema validation: Action args / Tool input / Observation pydantic 校验",
+        "  3. Evidence rule: reply_to_user 承诺的 claim 必须 map 到已有的 observation_id",
+        "  4. Business boundary: 越范围请求（下单/支付/售后）→ 拒绝并改发 FallbackAction",
+        "fallback 归属：gate-triggered fallback 由本 feature 写 TraceRecord.fallback_reason（source=gate）"
+      ],
+      "implementation_notes": [
+        "四道门独立返回 GateDecision，短路：任一拒绝即整体拒绝并改发 FallbackAction（TraceRecord.fallback_reason=gate:<which_gate>）",
+        "Evidence rule 起步仅做 ID 存在性校验：维护 turn-scoped observation_id 集合；reply 里若声称有数据来源，必须引用其中某个 id。语义级比对留到 V3.1",
+        "Business boundary 采用白名单 topic（need_expression / clarification / candidate_search / comparison / advice），其余 topic 一律 fallback",
+        "PermissionPolicy 是 HardeningGate 的前置检查：先过权限再过四道 gate；PermissionDecision.deny 也写进 TraceRecord.fallback_reason（source=permission）"
+      ],
+      "acceptance_criteria": [
+        "4 种 gate 拒绝场景各一个单测：非法 action / schema 失败 / 无证据 claim / 越界请求",
+        "Specialist 调用 allowed_capabilities 外的 tool 被 PermissionPolicy 拒",
+        "gate 拒绝时写入 TraceRecord.fallback_reason 且包含 source 标记",
+        "pytest tests/v3/test_f07_hardening.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F08",
+      "name": "Turn Runtime + TaskBoard + ContextPacket + TraceStore",
+      "description": "一轮 turn 的核心运行时 — 创建 TaskBoard、串行执行 task、压缩 context、写 trace。V3 最高风险 feature",
+      "priority": 8,
+      "size": "L",
+      "risk": "highest",
+      "risk_note": "状态机、压缩语义、trace 一致性三者交织。要求 coding agent 先写 20 行 spike 跑通 'receive message → create board → run 1 task → produce TurnResult'，再写正式实现",
+      "status": "done",
+      "depends_on": ["V3-F02", "V3-F04", "V3-F05", "V3-F07"],
+      "spec_reference": "docs/app_spec.md §7 Runtime（TaskBoard / SerialExecutor / ContextPacket / TraceStore 的正式定义）",
+      "validation_refs": ["V3-F08-PYTEST"],
+      "scope": [
+        "app/v3/runtime/task_board.py: TurnTaskBoard.create / add_task / next_ready / mark_done / mark_failed / mark_blocked",
+        "app/v3/runtime/executor.py: SerialExecutor.run_turn(session, user_message) -> TurnResult",
+        "app/v3/runtime/context_packet.py: ContextPacketBuilder.compress(session_memory, task_board) -> ContextPacket",
+        "app/v3/runtime/trace_store.py: TraceStore（内存 dict，按 session_id + turn_number 索引；F14 的 trace 端点读此）",
+        "一轮内串行：每次只取一个 ready task 执行；不并行（spec §7）"
+      ],
+      "implementation_notes": [
+        "开工强制 spike：先手写 20 行 'receive→board→1 task→TurnResult' 跑通再写正式实现。spike 可以 stub MainAgent.decide 返回固定 Action，mock 一个 tool",
+        "TurnTask 状态机: pending → ready → running → (done | failed | blocked)；blocked 可在依赖任务完成后 recompute_ready 回到 ready",
+        "SerialExecutor.next_ready() 返回 None 即 turn 结束（所有 task 终态或全部 blocked）",
+        "ContextPacket 压缩规则（spec §6.10）: 禁止任何 inferred 字段；必须保留 unanswered_clarifications 和 current_candidates 两个关键状态",
+        "TraceStore 存储结构: dict[(session_id, turn_number)] -> TraceRecord；F14 的 trace endpoint 从这里读",
+        "ContextPacketBuilder 必须有一个 golden test 文件固化输出格式（tests/v3/fixtures/context_packet_*.json）"
+      ],
+      "acceptance_criteria": [
+        "一个 turn 内跑 3 个 task（一个 ready 一个 blocked 一个 done），执行顺序正确",
+        "ContextPacket 不包含 inferred 字段（golden test 断言）",
+        "TraceRecord 包含所有 task 的 invocation 与 decision",
+        "TraceStore 可按 (session_id, turn_number) 查到完整 trace",
+        "pytest tests/v3/test_f08_runtime.py 通过（含 ContextPacketBuilder.compress 的 golden test）"
+      ]
+    },
+    {
+      "id": "V3-F09",
+      "name": "Main Agent Loop + Action Set + LLM 集成",
+      "description": "Bounded loop 主体 — observe→decide→act，集成 OpenAI 兼容 LLM（空 key 走 mock）",
+      "priority": 9,
+      "size": "L",
+      "risk": "high",
+      "risk_note": "LLM 决策 JSON schema 漂移；用 Pydantic v2 discriminated Action 反序列化，失败即 fallback（不重试不纠错）",
+      "status": "done",
+      "depends_on": ["V3-F05", "V3-F06", "V3-F07", "V3-F08"],
+      "spec_reference": "docs/app_spec.md §5 Core Loop + §6.9 Degradation + §10 AgentDecision/Action types",
+      "validation_refs": ["V3-F09-PYTEST"],
+      "scope": [
+        "app/v3/agents/main_agent.py: MainAgent.decide(context_packet) -> AgentDecision",
+        "动作分发器：reply_to_user / ask_clarification / call_tool / call_sub_agent / fallback 分别走不同路径",
+        "max_steps=8 硬上限（超过强制 fallback，写 TraceRecord.fallback_reason source=loop_exhausted）",
+        "LLM 层 app/v3/agents/llm_client.py: httpx.AsyncClient + OpenAI chat.completions schema",
+        "OPENAI_API_KEY 空时走 mock（内置决策模板，对齐 spec §12 三场景）",
+        "所有决策 emit decision hook"
+      ],
+      "implementation_notes": [
+        "决策 schema: LLM 输出 JSON，用 Pydantic v2 discriminated Action.model_validate_json 直接反序列化；失败即 FallbackAction，不重试、不结构化纠错、不二次 prompt",
+        "Mock LLM: OPENAI_API_KEY 空时从 mock_responses 字典按场景 key 返回预设 AgentDecision 序列；key 基于 context 里的用户消息关键词",
+        "每次 decide() 必 emit decision hook；TraceRecord.decisions 按顺序追加",
+        "max_steps 触发时生成 FallbackAction(reason='loop_exhausted')，TraceRecord.fallback_reason source=loop_exhausted",
+        "LLM prompt 组装通过 F06 PromptRegistry.assemble()，不硬编码"
+      ],
+      "acceptance_criteria": [
+        "Mock LLM 下 happy path（需求明确 → 调 1 个 tool → reply）单测通过",
+        "Clarification path（缺预算 → ask_clarification）单测通过",
+        "step ≥ 8 时强制 fallback 单测通过",
+        "LLM JSON 反序列化失败时走 fallback（不抛错）",
+        "pytest tests/v3/test_f09_main_agent.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F10",
+      "name": "Fixed Specialist 基类 + Team Protocol",
+      "description": "Specialist 协议骨架 — Main Agent 通过 TeamTask 派发给 Specialist，后者返回 SpecialistObservation",
+      "priority": 10,
+      "size": "M",
+      "risk": "medium",
+      "status": "done",
+      "depends_on": ["V3-F03", "V3-F07", "V3-F08"],
+      "spec_reference": "docs/app_spec.md §8 Multi-Agent Platform（AgentTeam / fixed_specialist / Team Protocol）",
+      "validation_refs": ["V3-F10-PYTEST"],
+      "scope": [
+        "app/v3/specialists/base.py: Specialist(ABC) 基类；execute(brief: SpecialistBrief) -> SpecialistObservation",
+        "app/v3/specialists/team.py: AgentTeam 按 role 注册 specialist",
+        "Specialist 的 tool invocation 通过 F03 Registry 且受 F07 PermissionPolicy 检查"
+      ],
+      "implementation_notes": [
+        "SpecialistBrief 必带 task_id + allowed_capabilities（F03 Registry 视图）；Specialist 调用 allowed_capabilities 外的 tool 被 F07 PermissionPolicy 拒",
+        "Specialist.execute() 内的 tool 调用必须走 F03 CapabilityRegistry.get(name).invoke(args)，不能直接 new tool 实例",
+        "Specialist 只产出 SpecialistObservation，不能发 ReplyAction、不能改 Main Agent 决策（spec §8 硬约束）",
+        "V3.0 不支持 persistent_teammate / dynamic_fork；基类设计只需覆盖 fixed_specialist 一种形态"
+      ],
+      "acceptance_criteria": [
+        "一个 mock specialist 正确接收 brief 返回 observation",
+        "Specialist 越权 tool 调用被 F07 PermissionPolicy 拒绝",
+        "AgentTeam 按 role 查询正确",
+        "pytest tests/v3/test_f10_specialist_base.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F11",
+      "name": "本地 Mock 工具 + 商品目录",
+      "description": "3 个本地工具 + 30-50 mock 产品 seed 数据（spec §13：phones + earphones）",
+      "priority": 11,
+      "size": "M",
+      "risk": "low",
+      "status": "done",
+      "depends_on": ["V3-F03"],
+      "spec_reference": "docs/app_spec.md §3 Shopping Assistant + §13 NFR（mock catalog: ~30-50 SKU）",
+      "validation_refs": ["V3-F11-PYTEST"],
+      "scope": [
+        "app/v3/tools/catalog_search.py: catalog_search(query, filters) -> List[Product]",
+        "app/v3/tools/inventory_check.py: inventory_check(sku) -> InventoryStatus",
+        "app/v3/tools/product_compare.py: product_compare(sku_a, sku_b, dimensions) -> ComparisonResult",
+        "app/v3/tools/seed_data.py: ≥15 phones + ≥15 earphones（品牌/价格/特性/库存需覆盖 happy / low_stock / clarify 场景）",
+        "3 工具均实现 ToolProvider 接口，注册到 F03 CapabilityRegistry"
+      ],
+      "acceptance_criteria": [
+        "3 工具单测各一（正常参数 + 非法参数）",
+        "Seed 数据覆盖 spec §12 三对话例中提到的 SKU 类别",
+        "工具已注册到 CapabilityRegistry（可被 specialist 发现）",
+        "pytest tests/v3/test_f11_tools.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F12",
+      "name": "MCP 客户端 + Mock Server + RAG 风格工具",
+      "description": "跑通 MCP 客户端接入：实现 MCPProvider、内置 mock MCP server、暴露 RAG 风格的商品知识检索工具",
+      "priority": 12,
+      "size": "M",
+      "risk": "medium",
+      "risk_note": "MCP 协议本身稳定但实现细节多；V3.0 只要求客户端 + mock server 同进程跑通基本 tools.list / tools.call 流程，不追求协议完整性",
+      "status": "done",
+      "depends_on": ["V3-F03", "V3-F11"],
+      "spec_reference": "docs/app_spec.md §9 Extension Model（MCP + Plugins） — MCP 兼容要求 + V3.0 不强制真实 server",
+      "validation_refs": ["V3-F12-PYTEST"],
+      "scope": [
+        "app/v3/tools/mcp_client.py: MCPClient（httpx 或 stdio 传输，V3.0 用 stdio 同进程）",
+        "app/v3/tools/mcp_provider.py: MCPProvider 实现 ToolProvider 接口，invoke() 桥到 MCPClient.call_tool",
+        "app/v3/tools/mcp_mock_server/: 内置 mock MCP server，提供一个 rag_product_knowledge tool（输入 query，返回 3-5 条商品知识片段）",
+        "app/v3/tools/mcp_mock_server/knowledge_base.py: mock RAG 知识库（与 F11 seed 数据相关，例如商品评测、品牌背景、使用场景）",
+        "注册 MCP 工具到 F03 CapabilityRegistry（kind=mcp_tool），specialist 可像调本地 tool 一样调用"
+      ],
+      "implementation_notes": [
+        "MCP 协议对齐：tools.list 返回 schema，tools.call 执行并返回 content 数组。V3.0 参考官方 python-sdk（`mcp` 包）但如果体积过大可自己实现最小子集",
+        "Mock server 运行方式：同进程异步任务（asyncio）；生产替换为外部进程只需改 MCPClient 的 transport 参数",
+        "MCPProvider.invoke(args) → MCPClient.call_tool(tool_name, args) → Observation；Observation.evidence_source='mcp:<tool_name>'",
+        "不做认证 / ACL（V3.0 mock 场景），生产再加",
+        "mcp_mock_enabled=true 时启用；false 时注册被跳过（允许 V3.1 切真实 server）"
+      ],
+      "acceptance_criteria": [
+        "MCPClient 能列出 mock server 的 tools（tools.list 调用成功）",
+        "Specialist 通过 CapabilityRegistry 调用 rag_product_knowledge 返回结构化结果",
+        "MCPProvider isinstance(ToolProvider) 为 True（接口统一）",
+        "mcp_mock_enabled=false 时 rag 工具不在 Registry.list(kind=mcp_tool) 中",
+        "pytest tests/v3/test_f12_mcp.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F13",
+      "name": "4 个领域 Specialists",
+      "description": "领域知识化 — shopping_brief / candidate_analysis / comparison / recommendation_rationale",
+      "priority": 13,
+      "size": "M",
+      "risk": "medium",
+      "status": "done",
+      "depends_on": ["V3-F10", "V3-F11", "V3-F12", "V3-F06"],
+      "spec_reference": "docs/app_spec.md §8 AgentTeam（fixed 角色池） + §3 First Business Scenario（5 个任务类型）",
+      "validation_refs": ["V3-F13-PYTEST"],
+      "scope": [
+        "app/v3/specialists/shopping_brief.py: 接收用户原始需求，产出结构化 brief（budget / category / brand / scene / exclusions / slots_missing）",
+        "app/v3/specialists/candidate_analysis.py: 接收 brief + candidate 列表，标注每个候选的 fit 原因",
+        "app/v3/specialists/comparison.py: 多商品对比，按用户关注维度输出 ComparisonResult",
+        "app/v3/specialists/recommendation_rationale.py: 为最终 pick 给出 traceable 推荐理由（每条理由引用 observation_id，可调用 F12 的 rag 工具拉增强知识）",
+        "每个 specialist 通过 F06 PromptRegistry 注册自己的 role prompt"
+      ],
+      "implementation_notes": [
+        "shopping_brief: Pydantic field validator 强制 slots 结构（budget 必须 {min, max, currency}），LLM 输出不合 schema 即在 observation 里标 slots_missing",
+        "candidate_analysis: 输出的每个 candidate.fit_reasons 必须关联 observation_id（来自 catalog_search 的 tool-fact）",
+        "comparison: 输入维度白名单 = {price, battery, noise_cancel, weight, warranty, brand}；LLM 若试图引入其他维度，Specialist 直接过滤掉",
+        "recommendation_rationale: 输出必须通过 F07 evidence rule 校验（每条 rationale 有 observation_id，可来自 catalog/inventory/compare/rag 任一）；可选调用 F12 rag 工具拉增强",
+        "4 个 specialist 的 allowed_capabilities 按最小权限配置：brief→无 tool / candidate_analysis→catalog_search / comparison→product_compare,inventory_check / rationale→全部含 rag"
+      ],
+      "acceptance_criteria": [
+        "4 specialist 各有独立测试",
+        "recommendation_rationale 的输出通过 evidence rule 检查（每条理由带 observation_id）",
+        "shopping_brief 在缺失槽位时正确识别 slots_missing",
+        "comparison 过滤掉非白名单维度",
+        "pytest tests/v3/test_f13_domain_specialists.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F14",
+      "name": "HTTP API 层（3 端点 + 中间件）",
+      "description": "对外 3 个 V3 endpoint + trace_id 注入 + latency_ms 记录",
+      "priority": 14,
+      "size": "S",
+      "risk": "low",
+      "status": "done",
+      "depends_on": ["V3-F08", "V3-F09"],
+      "spec_reference": "docs/app_spec.md §7 Runtime（3 API 定义）+ §10 Public Interfaces",
+      "validation_refs": ["V3-F14-PYTEST"],
+      "scope": [
+        "app/v3/api/sessions.py: POST /api/v3/sessions 创建 session，返回 session_id",
+        "app/v3/api/messages.py: POST /api/v3/sessions/{session_id}/messages 发消息，跑一轮，返回 TurnResult",
+        "app/v3/api/trace.py: GET /api/v3/sessions/{session_id}/turns/{turn_number}/trace 读 F08 TraceStore",
+        "app/v3/api/middleware.py: trace_id 注入（X-Trace-ID header）+ 响应 latency_ms 字段",
+        "Session 过期：max_turns=20 或 idle=30min 任一触发 → 409 Conflict"
+      ],
+      "acceptance_criteria": [
+        "3 端点用 httpx.AsyncClient 各一个集成测试",
+        "过期 session（max_turns 超 / idle 超）返回 409",
+        "响应 header 包含 X-Trace-ID",
+        "响应 body 包含 latency_ms 字段",
+        "pytest tests/v3/test_f14_api.py 通过"
+      ]
+    },
+    {
+      "id": "V3-F15",
+      "name": "Smoke Test（3 场景）+ 可观测性",
+      "description": "spec §12 三组参考对话可执行化 + 结构化 JSON 日志",
+      "priority": 15,
+      "size": "M",
+      "risk": "low",
+      "status": "done",
+      "depends_on": ["V3-F14", "V3-F13"],
+      "spec_reference": "docs/app_spec.md §12 Reference Dialogues（A/B/C 三场景）+ §6.11 Observability",
+      "validation_refs": ["V3-F15-SMOKE"],
+      "scope": [
+        "tests/v3/smoke/scenario_a_happy.py: 3000 预算降噪耳机，2-3 轮达成推荐",
+        "tests/v3/smoke/scenario_b_clarification.py: 礼物场景，多轮 clarification",
+        "tests/v3/smoke/scenario_c_fallback.py: 用户问'能下单吗' → fallback",
+        "app/v3/observability/logging_config.py: stdlib logging + JSON formatter（字段：timestamp / level / trace_id / session_id / turn_number / event / payload）",
+        "每轮 turn 开头/结尾 + 每次 invocation + 每次 hook emit 都产生一条 log"
+      ],
+      "acceptance_criteria": [
+        "3 smoke 脚本 pytest tests/v3/smoke/ 全绿",
+        "日志断言：每条 log 是 valid JSON，含 trace_id",
+        "GET /api/v3/sessions/{id}/turns/{n}/trace 返回可读 trace（含 decisions / invocations / fallback_reason）",
+        "pytest tests/v3/test_f15_smoke.py 通过"
+      ]
+    }
+  ]
+}

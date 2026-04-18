@@ -1,0 +1,301 @@
+{
+  "project": "smart-ecommerce-recommend-v2",
+  "created": "2026-04-17",
+  "source": "docs/v2/设计V2.md",
+  "track": "harness/v2",
+  "features": [
+    {
+      "id": "V2-F01",
+      "name": "V2 harness 轨道初始化",
+      "description": "生成 V2 的 app spec、feature backlog、progress、validation、command docs 和 bootstrap 入口，建立并行新轨道。",
+      "priority": 1,
+      "status": "done",
+      "depends_on": [],
+      "acceptance_criteria": [
+        "`harness/v2/` 下存在 `app_spec.md`、`feature_list.json`、`claude-progress.txt`、`validation_matrix.json`、`initializer_report.md`、`README.md`",
+        "`python harness/v2/bootstrap.py` 能验证轨道文件完整性并输出当前 next feature",
+        "`.claude/commands/code-v2.md` 与 `.codex/skills/code-v2/SKILL.md` 明确读取 `harness/v2/*`，不会误操作 V1 轨道"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#1. 产品目标",
+        "docs/v2/设计V2.md#2. 系统边界",
+        "docs/v2/设计V2.md#12. 测试验收"
+      ],
+      "validation_refs": [
+        "TRACK-FILES",
+        "TRACK-COMMAND-DOCS",
+        "V2-F01-BOOTSTRAP"
+      ]
+    },
+    {
+      "id": "V2-F02",
+      "name": "Shared Runtime 基础类型与注册表骨架",
+      "description": "建立 Manager/Worker/Tool/Task/Event/Snapshot 的核心接口和注册机制。",
+      "priority": 2,
+      "status": "done",
+      "depends_on": [
+        "V2-F01"
+      ],
+      "acceptance_criteria": [
+        "提供 Manager、Worker、ToolSpec、WorkerTask、WorkerResult、TaskRecord、Event、RecommendationSnapshot 等基础类型",
+        "提供 ManagerRegistry、WorkerRegistry、ToolRegistry 的注册与查找机制",
+        "worker 之间禁止直接通信的边界在代码与测试中可验证"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#3. 平台架构",
+        "docs/v2/设计V2.md#5. Tool 与 Worker 模型",
+        "docs/v2/设计V2.md#9. 核心类型定义"
+      ],
+      "validation_refs": [
+        "V2-F02-PYTEST",
+        "V2-F02-STRUCTURE"
+      ]
+    },
+    {
+      "id": "V2-F03",
+      "name": "SQLite 持久化层",
+      "description": "落地 sessions、turns、task_records、profiles、snapshots、events 的 repository 和建表初始化。",
+      "priority": 3,
+      "status": "done",
+      "depends_on": [
+        "V2-F02"
+      ],
+      "acceptance_criteria": [
+        "SQLite 初始化能创建 sessions、session_turns、task_records、user_profiles、recommendation_snapshots、events 六类表",
+        "提供对应 repository 接口并通过最小 CRUD 测试",
+        "应用生命周期内能完成数据库初始化且不依赖外部服务"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#6. 状态、记忆与存储"
+      ],
+      "validation_refs": [
+        "V2-F03-PYTEST",
+        "V2-F03-SCHEMA"
+      ]
+    },
+    {
+      "id": "V2-F04",
+      "name": "Policy Gate + Hook Bus + PromptRegistry",
+      "description": "落地三态 policy、核心 hook 点和集中注册版本化 prompt 系统。",
+      "priority": 4,
+      "status": "done",
+      "depends_on": [
+        "V2-F02",
+        "V2-F03"
+      ],
+      "acceptance_criteria": [
+        "Policy Gate 能区分 allow / reject / clarify",
+        "Hook Bus 支持 turn、worker、tool、profile、snapshot、background 核心事件",
+        "PromptRegistry 支持 name + version 读取与变量模板校验"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#4. Runtime 内核",
+        "docs/v2/设计V2.md#11. 降级与错误恢复"
+      ],
+      "validation_refs": [
+        "V2-F04-PYTEST",
+        "V2-F04-POLICY"
+      ]
+    },
+    {
+      "id": "V2-F05",
+      "name": "ShoppingManager 与会话 API",
+      "description": "落地 /api/v2/sessions 与 /messages 的会话创建与单轮执行框架。",
+      "priority": 5,
+      "status": "done",
+      "depends_on": [
+        "V2-F02",
+        "V2-F03",
+        "V2-F04"
+      ],
+      "acceptance_criteria": [
+        "支持创建 V2 会话并写入持久化状态",
+        "ShoppingManager 能执行单轮流程并输出 reply_ready / needs_clarification / fallback_used",
+        "会话 API 的响应格式与 App Spec 一致"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#3. 平台架构",
+        "docs/v2/设计V2.md#8. 公开 API"
+      ],
+      "validation_refs": [
+        "V2-F05-PYTEST",
+        "V2-F05-API"
+      ]
+    },
+    {
+      "id": "V2-F06",
+      "name": "Preference Worker + Session Memory + Profile Writeback",
+      "description": "完成偏好抽取、稳定判定、画像回写和 recommendation_refresh 事件触发。",
+      "priority": 6,
+      "status": "done",
+      "depends_on": [
+        "V2-F05"
+      ],
+      "acceptance_criteria": [
+        "能从多轮对话中抽取 budget、product_category、brand、use_case、exclusion 五类偏好",
+        "满足稳定判定后写入长期画像，不满足时仅保留在 session memory",
+        "偏好稳定或修正时写 recommendation_refresh 事件"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#6. 状态、记忆与存储",
+        "docs/v2/设计V2.md#7. 推荐闭环与场景快照"
+      ],
+      "validation_refs": [
+        "V2-F06-PYTEST",
+        "V2-F06-WRITEBACK"
+      ]
+    },
+    {
+      "id": "V2-F07",
+      "name": "Catalog/Inventory Workers + Scene Context 规则",
+      "description": "完成 default/homepage/product_page/cart 的上下文门控和选品/库存能力。",
+      "priority": 7,
+      "status": "done",
+      "depends_on": [
+        "V2-F05",
+        "V2-F06"
+      ],
+      "acceptance_criteria": [
+        "catalog 和 inventory worker 能被 ShoppingManager 调度并返回结构化结果",
+        "scene 规则在 product_page / cart 缺少上下文时返回 clarify 或 default fallback",
+        "homepage 与 default 能仅依赖用户画像读取或生成结果"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#5. Tool 与 Worker 模型",
+        "docs/v2/设计V2.md#7. 推荐闭环与场景快照"
+      ],
+      "validation_refs": [
+        "V2-F07-PYTEST",
+        "V2-F07-SCENE"
+      ]
+    },
+    {
+      "id": "V2-F08",
+      "name": "Comparison Worker + Copy Worker",
+      "description": "完成商品比较与文案生成，并统一纳入 manager 调度。",
+      "priority": 8,
+      "status": "done",
+      "depends_on": [
+        "V2-F05",
+        "V2-F07"
+      ],
+      "acceptance_criteria": [
+        "comparison worker 能对多个商品给出结构化比较结果",
+        "copy worker 能按 PromptRegistry 输出个性化文案",
+        "比较和文案结果都由主 manager 汇总返回，不直接向用户发言"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#5. Tool 与 Worker 模型",
+        "docs/v2/设计V2.md#4. Runtime 内核"
+      ],
+      "validation_refs": [
+        "V2-F08-PYTEST",
+        "V2-F08-COPY"
+      ]
+    },
+    {
+      "id": "V2-F09",
+      "name": "Background EventProcessor + Snapshot Refresh",
+      "description": "异步消费 refresh 事件并生成快照。",
+      "priority": 9,
+      "status": "done",
+      "depends_on": [
+        "V2-F03",
+        "V2-F06",
+        "V2-F07"
+      ],
+      "acceptance_criteria": [
+        "EventProcessor 能消费 recommendation_refresh 事件",
+        "刷新结果能写入 recommendation_snapshots",
+        "失败事件保留 failed 状态与错误信息，不静默丢失"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#4. Runtime 内核",
+        "docs/v2/设计V2.md#7. 推荐闭环与场景快照"
+      ],
+      "validation_refs": [
+        "V2-F09-PYTEST",
+        "V2-F09-EVENTS"
+      ]
+    },
+    {
+      "id": "V2-F10",
+      "name": "Recommendation Read API + On-demand Snapshot",
+      "description": "完成 /api/v2/users/{user_id}/recommendations 和 scene fallback 行为。",
+      "priority": 10,
+      "status": "done",
+      "depends_on": [
+        "V2-F07",
+        "V2-F09"
+      ],
+      "acceptance_criteria": [
+        "推荐读取 API 支持 default/homepage/product_page/cart 四类 scene",
+        "scene 上下文缺失时按规则 clarify 或回退 default",
+        "快照 miss 或过期时支持按需生成"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#7. 推荐闭环与场景快照",
+        "docs/v2/设计V2.md#8. 公开 API"
+      ],
+      "validation_refs": [
+        "V2-F10-PYTEST",
+        "V2-F10-API"
+      ]
+    },
+    {
+      "id": "V2-F11",
+      "name": "Feedback Event Ingress",
+      "description": "完成 /feedback-events 事件接入与持久化，占位不做学习闭环。",
+      "priority": 11,
+      "status": "done",
+      "depends_on": [
+        "V2-F03",
+        "V2-F05"
+      ],
+      "acceptance_criteria": [
+        "支持 click / skip / purchase 三类 feedback 事件入库",
+        "feedback API 有明确的结构化响应",
+        "首版不会因 feedback 事件直接触发画像或推荐更新"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#7. 推荐闭环与场景快照",
+        "docs/v2/设计V2.md#8. 公开 API"
+      ],
+      "validation_refs": [
+        "V2-F11-PYTEST",
+        "V2-F11-FEEDBACK"
+      ]
+    },
+    {
+      "id": "V2-F12",
+      "name": "V2 Validation/Smoke/Observability",
+      "description": "完成 V2 测试矩阵、smoke 入口、状态更新和最终 handoff。",
+      "priority": 12,
+      "status": "done",
+      "depends_on": [
+        "V2-F05",
+        "V2-F06",
+        "V2-F07",
+        "V2-F08",
+        "V2-F09",
+        "V2-F10",
+        "V2-F11"
+      ],
+      "acceptance_criteria": [
+        "存在覆盖 V2 关键链路的 deterministic validation 与 smoke 入口",
+        "V2 轨道的 progress 和 backlog 能基于验证结果完成 handoff",
+        "V2 回归验证与 V1 不回归验证都有明确入口"
+      ],
+      "spec_refs": [
+        "docs/v2/设计V2.md#11. 降级与错误恢复",
+        "docs/v2/设计V2.md#12. 测试验收"
+      ],
+      "validation_refs": [
+        "V2-F12-PYTEST",
+        "GLOBAL-V2-SMOKE",
+        "GLOBAL-V1-NONREGRESSION"
+      ]
+    }
+  ]
+}
+

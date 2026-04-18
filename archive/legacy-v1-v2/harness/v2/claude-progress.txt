@@ -1,0 +1,483 @@
+# Claude Progress — V2 Harness Track
+
+## Status: V2-F12 done, V2 track complete
+## Current Next Feature: none
+
+## Session Update 2026-04-17
+- Fixed a post-completion validation bug in `tests/test_v2_harness_bootstrap.py`.
+- `_current_next_feature_label()` now returns `none` when every V2 feature is already `done`, matching the current bootstrap output for a fully completed track.
+
+## Validation Summary
+- `pytest tests/test_v2_harness_bootstrap.py -q`
+- `pytest tests -k "test_v2_" -q`
+- `python smoke_test_v2.py`
+
+## Blockers
+- None.
+
+## Key Decisions
+- Kept the fix in the bootstrap test helper instead of changing the bootstrap script, because `python harness/v2/bootstrap.py` already reports the correct terminal state for a completed track.
+
+## Recommended Next Step
+- None inside the V2 harness track; the backlog remains complete after the validation fix.
+
+## Session Update 2026-04-17
+- Completed V2-F12 by adding the final V2 validation/smoke/handoff layer:
+  - `smoke_test_v2.py`
+  - `tests/test_v2_smoke_test.py`
+  - `tests/test_v2_observability.py`
+- Added V2-specific structured observability logs at the API boundary in `main.py` for:
+  - session creation
+  - message turns
+  - recommendation reads
+  - feedback ingress
+- Updated the V2 validation entrypoints so the deterministic suite is portable in this PowerShell environment:
+  - `harness/v2/validation_matrix.json`
+  - `harness/v2/README.md`
+  - replaced the non-expanding wildcard command with `pytest tests -k "test_v2_" -q`
+
+## Validation Summary
+- `pytest tests/test_v2_smoke_test.py -q`
+- `pytest tests/test_v2_observability.py -q`
+- `pytest tests -k "test_v2_" -q`
+- `python smoke_test_v2.py`
+- `pytest tests -q`
+- `python harness/v2/bootstrap.py`
+- Result: the new V2 smoke test passed (`1` test), the V2 observability test passed (`1` test), the V2 deterministic suite passed (`51` tests), the end-to-end smoke script completed successfully, the full repository regression suite passed (`92` tests), and after marking V2-F12 done the bootstrap should report `done=12`, `pending=0`, and `Current next feature: none`.
+
+## Blockers
+- None for V2-F12.
+- Residual environment warning: `pytest` still emits the existing `.pytest_cache` permission warning in this Windows sandbox, but all validation commands completed successfully.
+
+## Key Decisions
+- Kept V2 observability lightweight and deterministic by reusing the existing JSON logging + trace-id middleware instead of adding a separate V2 metrics subsystem in the final harness step.
+- Made the V2 suite entrypoint shell-portable with `pytest tests -k "test_v2_" -q`, because `pytest tests/test_v2_* -q` does not expand under the current PowerShell execution path.
+- Built the V2 smoke flow in-process with `TestClient` plus a dedicated V2 SQLite database so one script now covers conversation, profile writeback, background refresh, snapshot read, and feedback ingress.
+
+## Recommended Next Step
+- None inside the V2 harness track; the coded V2 backlog is complete. Future work, if any, should start as a new track or a post-harness productionization pass.
+
+## Session Update 2026-04-17
+- Completed V2-F11 by adding a dedicated feedback ingress path for the V2 track:
+  - `POST /api/v2/users/{user_id}/feedback-events`
+  - `V2SessionService.record_feedback_event()`
+- Added explicit V2 feedback API models and request validation:
+  - `FeedbackEventRequest`
+  - `FeedbackEventResponse`
+  - `product_page` feedback requires `product_id`
+  - `cart` feedback requires `product_ids`
+- Persisted `click` / `skip` / `purchase` feedback events into the shared `events` table with synchronous terminal semantics:
+  - `status="completed"`
+  - structured payload fields for `scene`, `product_id`, `product_ids`, and `metadata`
+- Added `tests/test_v2_feedback_api.py` to deterministically verify:
+  - all three supported feedback event types are accepted
+  - the API persists structured feedback payloads
+  - feedback ingress does not create recommendation refresh events, snapshots, or task records
+  - invalid `product_page` / `cart` context is rejected at the API boundary
+
+## Validation Summary
+- `pytest tests/test_v2_feedback_api.py -k no_learning -q`
+- `pytest tests/test_v2_feedback_api.py -q`
+- `pytest tests/test_v2_session_api.py tests/test_v2_recommendation_api.py tests/test_v2_background_refresh.py tests/test_v2_feedback_api.py -q`
+- `python harness/v2/bootstrap.py`
+- Result: the no-learning gate passed (`1` test), the full feedback validation file passed (`6` tests), the focused V2 regression suite passed with `19` tests total, and after marking the feature complete bootstrap should report `done=11`, `pending=1`, and `Current next feature: V2-F12 V2 Validation/Smoke/Observability`.
+
+## Blockers
+- None for V2-F11.
+- Residual environment warning: `pytest` still emits the existing `.pytest_cache` permission warning in this Windows sandbox, but test execution completed successfully.
+
+## Key Decisions
+- Reused the shared `events` table instead of creating a feedback-specific store, keeping V2-F11 aligned with the existing event model while still deferring the learning loop.
+- Marked ingested feedback events as `completed` immediately so the background refresh processor ignores them and the API stays side-effect free.
+- Kept the persisted payload focused on scene/context metadata because `event_id`, `user_id`, and the feedback `event_type` already live in first-class event columns.
+
+## Recommended Next Step
+- Start V2-F12 and add the final V2 smoke/validation/handoff layer, including the V2-wide deterministic suite, smoke script, and remaining observability glue.
+
+## Session Update 2026-04-17
+- Completed V2-F10 by adding a dedicated recommendation read path for the V2 track:
+  - `v2/recommendation_reads.py`
+  - `RecommendationReadService`
+- Exposed `GET /api/v2/users/{user_id}/recommendations` through the existing V2 service surface:
+  - `main.py`
+  - `v2/api_models.py`
+  - `v2/session_service.py`
+- Added scene-aware read semantics on top of the snapshot store:
+  - `homepage` / `default` can return an existing valid snapshot directly
+  - incomplete or unsupported `product_page` / `cart` requests fall back to `default` because the read API has no clarification loop
+  - `product_page` / `cart` snapshots are matched by normalized `scene_context`
+  - expired snapshots regenerate on demand and persist with the shared 24h TTL
+- Extended `RecommendationSnapshotStore` so contextual scene snapshots can be looked up without breaking the existing V2 conversation flow.
+- Added `tests/test_v2_recommendation_api.py` to deterministically verify:
+  - homepage snapshot hits
+  - `product_page` / `cart` fallback to `default` when context is missing
+  - on-demand contextual snapshot generation for `product_page` and `cart`
+  - expired snapshot regeneration
+
+## Validation Summary
+- `pytest tests/test_v2_recommendation_api.py -k scene -q`
+- `pytest tests/test_v2_recommendation_api.py -q`
+- `pytest tests/test_v2_session_api.py tests/test_v2_scene_workers.py tests/test_v2_background_refresh.py tests/test_v2_recommendation_api.py -q`
+- `python harness/v2/bootstrap.py`
+- Result: the new V2-F10 scene gate passed (`5` tests), the full recommendation read validation file passed (`6` tests), the focused V2 regression suite passed with `19` tests total, and bootstrap now reports `done=10`, `pending=2`, and `Current next feature: V2-F11 Feedback Event Ingress`.
+
+## Blockers
+- None for V2-F10.
+- Residual environment warning: `pytest` still emits the existing `.pytest_cache` permission warning in this Windows sandbox, but test execution completed successfully.
+
+## Key Decisions
+- Kept recommendation reads out of `ShoppingManager` so the GET API can reuse the deterministic scene worker chain without creating conversation turns or mixing read traffic into the interactive manager contract.
+- Treated invalid or incomplete scene context as a `default` fallback instead of a policy clarification because the read API is non-interactive and still needs a deterministic success path.
+- Reused the same 24h snapshot TTL as background refresh so async refresh and on-demand reads share one freshness rule.
+- Added contextual snapshot matching in the persistence layer so `product_page` and `cart` snapshots do not accidentally reuse another scene context for the same user.
+
+## Recommended Next Step
+- Start V2-F11 and expose `POST /api/v2/users/{user_id}/feedback-events`, persisting `click` / `skip` / `purchase` events without triggering any learning or refresh side effects.
+
+## Session Update 2026-04-17
+- Completed V2-F09 by adding a dedicated background refresh processor for the V2 track:
+  - `v2/background_refresh.py`
+  - `BackgroundRefreshProcessor`
+- Wired `V2SessionService` to expose the background refresh path while keeping the feature isolated from the legacy V1 flow:
+  - `v2/session_service.py`
+  - `v2/__init__.py`
+- Reused the deterministic V2 worker/tool surface to build `default` and `homepage` snapshots from refresh events:
+  - `catalog_worker`
+  - `inventory_worker`
+  - `copy_worker`
+- Added `tests/test_v2_background_refresh.py` to deterministically verify:
+  - `recommendation_refresh` events are consumed and marked completed
+  - refreshed scene snapshots are written to `recommendation_snapshots`
+  - failed refresh attempts retain `failed` status, `retry_count`, error detail, and old snapshots
+  - requeued events create a new background task attempt record and can complete on retry
+
+## Validation Summary
+- `pytest tests/test_v2_background_refresh.py -q`
+- `pytest tests/test_v2_background_refresh.py -k event -q`
+- `python harness/v2/bootstrap.py`
+- `pytest tests/test_v2_session_api.py tests/test_v2_preference_memory.py tests/test_v2_scene_workers.py tests/test_v2_comparison_copy.py tests/test_v2_background_refresh.py -q`
+- Result: the new V2-F09 validation file passed (`3` tests), the required event-semantics gate passed (`3` tests), the focused V2 regression suite passed with `19` tests total, and bootstrap stayed healthy. After marking the feature complete, the V2 track should report `done=9`, `pending=3`, and `Current next feature: V2-F10 Recommendation Read API + On-demand Snapshot`.
+
+## Blockers
+- None for V2-F09.
+- Residual environment warning: `pytest` still emits the existing `.pytest_cache` permission warning in this Windows sandbox, but test execution completed successfully.
+
+## Key Decisions
+- Kept background refresh in a dedicated `BackgroundRefreshProcessor` instead of folding it into `ShoppingManager`, so conversation turns and async refresh remain isolated while still sharing the same deterministic worker/tool surface.
+- Refreshed only `default` and `homepage` scenes in V2-F09 because those scenes are profile-only in the App Spec; context-bound `product_page` and `cart` snapshots are deferred to the on-demand read path in V2-F10.
+- Forced refresh generation to bypass snapshot reuse so background events do not silently re-read stale snapshots, and preserved old snapshots on failure by only writing new snapshot rows after the full refresh build succeeds.
+- Recorded one background `task_record` per event attempt so failed retries remain inspectable instead of being overwritten.
+
+## Recommended Next Step
+- Start V2-F10 and expose `GET /api/v2/users/{user_id}/recommendations`, reusing the new snapshot store plus an on-demand scene-aware generation path when a requested snapshot is missing or expired.
+
+## Session Update 2026-04-17
+- Completed V2-F08 by adding a dedicated comparison/copy worker surface for the V2 track:
+  - `v2/comparison_copy_workers.py`
+  - `ComparisonWorker`
+  - `CopyWorker`
+- Registered deterministic V2 tool handlers for:
+  - `product.compare`
+  - `copy.generate`
+- Extended the V2 response models so `ShoppingManager` can return aggregated comparison and copy outputs without letting workers speak directly to the user:
+  - `v2/api_models.py`
+  - `v2/shopping.py`
+  - `v2/session_service.py`
+- Updated the reply-ready worker chain so V2 message turns now execute:
+  - `preference_worker`
+  - `catalog_worker`
+  - `inventory_worker`
+  - `comparison_worker`
+  - `copy_worker`
+- Added `tests/test_v2_comparison_copy.py` to deterministically verify:
+  - `comparison_worker` produces structured multi-product comparison output
+  - `copy_worker` uses `PromptRegistry`-backed generation
+  - `ShoppingManager` aggregates `comparisons` + `copies` in the conversation response
+- Updated `tests/test_v2_session_api.py` and `tests/test_v2_scene_workers.py` so the V2 reply-ready path now asserts the expanded worker chain plus aggregated comparison/copy outputs.
+
+## Validation Summary
+- `pytest tests/test_v2_comparison_copy.py -k structured -q`
+- `pytest tests/test_v2_comparison_copy.py -k prompt_registry -q`
+- `pytest tests/test_v2_comparison_copy.py -k aggregates -q`
+- `pytest tests/test_v2_comparison_copy.py -q`
+- `pytest tests/test_v2_comparison_copy.py -k copy -q`
+- `pytest tests/test_v2_session_api.py -q`
+- `pytest tests/test_v2_scene_workers.py -q`
+- `pytest tests/test_v2_runtime_registry.py tests/test_v2_persistence.py tests/test_v2_policy_hook_prompt.py tests/test_v2_session_api.py tests/test_v2_preference_memory.py tests/test_v2_scene_workers.py tests/test_v2_comparison_copy.py -q`
+- `python harness/v2/bootstrap.py`
+- Result: the new V2-F08 validation file passed (`3` tests), the required copy gate command passed, the updated V2 session API regression still passed (`4` tests), the updated scene-worker regression still passed (`6` tests), the focused V2 regression suite passed with `32` tests total, and bootstrap stayed healthy. After marking the feature complete, the V2 track should report `done=8`, `pending=4`, and `Current next feature: V2-F09 Background EventProcessor + Snapshot Refresh`.
+
+## Blockers
+- None for V2-F08.
+- Residual environment warning: `pytest` still emits the existing `.pytest_cache` permission warning in this Windows sandbox, but test execution completed successfully.
+
+## Key Decisions
+- Kept comparison/copy behavior in a dedicated `v2/comparison_copy_workers.py` module so later snapshot refresh can reuse the same deterministic comparison and copy generation surface instead of re-embedding it in the manager.
+- Let `ShoppingManager` own the user-facing response while exposing structured `comparisons` and `copies` in the V2 message contract, which preserves the worker isolation rule and keeps worker output inspectable for later background refresh work.
+- Kept `copy.generate` deterministic and PromptRegistry-backed so F08 stays self-contained without pulling a real LLM dependency into the V2 harness loop.
+
+## Recommended Next Step
+- Start V2-F09 and consume the existing `recommendation_refresh` events to persist refreshed `recommendation_snapshots`, ideally reusing the new comparison/copy worker outputs while preserving failed-event visibility.
+
+## Session Update 2026-04-17
+- Completed V2-F07 by adding dedicated V2 scene workers and wiring them into the existing V2 message loop:
+  - `v2/scene_workers.py`
+  - `CatalogWorker`
+  - `InventoryWorker`
+- Updated `ShoppingManager` so the reply-ready path now runs a real worker chain:
+  - `preference_worker`
+  - `catalog_worker`
+  - `inventory_worker`
+- Registered deterministic V2 tool handlers for:
+  - `catalog.search_products`
+  - `inventory.check`
+  - `recommendation.read_snapshot`
+- Extended `V2SessionService` with `RecommendationSnapshotStore` so `default` / `homepage` scene turns can read existing scene snapshots before generating fresh results.
+- Added `tests/test_v2_scene_workers.py` to deterministically verify:
+  - `catalog_worker` + `inventory_worker` produce structured product outputs through `ShoppingManager`
+  - `product_page` and `cart` clarify when required scene context is missing
+  - `default` can generate from user profile only
+  - `homepage` can reuse an existing snapshot
+  - `product_page` with context returns related products without echoing the anchor item
+- Updated `tests/test_v2_session_api.py` so the V2 message API now asserts non-empty `products` and the full `preference -> catalog -> inventory` worker path.
+
+## Validation Summary
+- `pytest tests/test_v2_scene_workers.py -q`
+- `pytest tests/test_v2_scene_workers.py -k scene -q`
+- `pytest tests/test_v2_session_api.py -q`
+- `pytest tests/test_v2_preference_memory.py -q`
+- `pytest tests/test_v2_runtime_registry.py tests/test_v2_persistence.py tests/test_v2_policy_hook_prompt.py tests/test_v2_session_api.py tests/test_v2_preference_memory.py tests/test_v2_scene_workers.py -q`
+- `python harness/v2/bootstrap.py`
+- Result: the new V2-F07 validation file passed (`6` tests), the scene-specific gate passed (`6` tests), the existing V2 session API regression still passed (`4` tests), the preference-memory regression still passed (`3` tests), the focused V2 regression suite passed with `29` tests total, and bootstrap stayed healthy. After marking the feature complete, the V2 track should report `done=7`, `pending=5`, and `Current next feature: V2-F08 Comparison Worker + Copy Worker`.
+
+## Blockers
+- None for V2-F07.
+- Residual environment warning: `pytest` still emits the existing `.pytest_cache` permission warning in this Windows sandbox, but test execution completed successfully.
+
+## Key Decisions
+- Kept scene-specific product selection and inventory filtering in a dedicated `v2/scene_workers.py` module so later snapshot refresh and recommendation read APIs can reuse the same deterministic ranking surface.
+- Let `default` and `homepage` attempt a snapshot read first, then fall back to generated catalog candidates, matching the V2 spec without pulling the read API work forward.
+- Moved scene-context enforcement ahead of worker execution in `ShoppingManager` so `product_page` / `cart` clarification happens before any unnecessary worker calls.
+
+## Recommended Next Step
+- Start V2-F08 and add `comparison_worker` plus `copy_worker`, then have `ShoppingManager` aggregate those structured outputs without letting workers speak directly to the user.
+
+## Session Update 2026-04-17
+- Completed V2-F06 by replacing the inline preference heuristics with a dedicated V2 preference module:
+  - `v2/preference.py`
+  - `PreferenceWorker`
+  - session-memory stability / correction helpers
+- Updated `ShoppingManager` so preference extraction now runs through a real V2 worker and keeps the deterministic `reply_ready / needs_clarification / fallback_used` manager contract.
+- Extended `V2SessionService` so each turn now:
+  - appends extracted signals into `session memory`
+  - keeps a bounded `preference_history`
+  - evaluates the V2 stability rules (`>=2` categories, `confidence >= 0.7`, no same-category conflicts in the last 3 user turns)
+  - writes `user_profiles` only when preferences are stable or explicitly corrected
+  - persists `recommendation_refresh` events with `preference_stable` / `preference_corrected` triggers
+- Added `tests/test_v2_preference_memory.py` to deterministically verify:
+  - multi-turn extraction of `budget / product_category / brand / use_case / exclusion`
+  - unstable preferences stay only in `session memory`
+  - stable preferences write back to `user_profiles` and emit refresh events
+  - corrected preferences update the latest session memory and emit a `preference_corrected` refresh event
+- Updated `tests/test_v2_session_api.py` to reflect the new stable-preference behavior on the V2 message API path.
+
+## Validation Summary
+- `pytest tests/test_v2_preference_memory.py -k multiple_turns -q`
+- `pytest tests/test_v2_preference_memory.py -k stable_preferences_writeback -q`
+- `pytest tests/test_v2_preference_memory.py -k corrections_and_keeps_session_memory_latest -q`
+- `pytest tests/test_v2_preference_memory.py -k writeback -q`
+- `pytest tests/test_v2_preference_memory.py -q`
+- `pytest tests/test_v2_session_api.py -q`
+- `pytest tests/test_v2_runtime_registry.py tests/test_v2_persistence.py tests/test_v2_policy_hook_prompt.py tests/test_v2_session_api.py tests/test_v2_preference_memory.py -q`
+- `python harness/v2/bootstrap.py`
+- Result: the new V2-F06 validation file passed (`3` tests), the writeback-specific gate passed (`2` tests), the existing V2 session API regression still passed (`4` tests), the focused V2 regression suite passed with `23` tests total, and bootstrap stayed healthy. The V2 track should now report `done=6`, `pending=6`, and `Current next feature: V2-F07 Catalog/Inventory Workers + Scene Context 规则`.
+
+## Blockers
+- None for V2-F06.
+- Residual environment warning: `pytest` still emits the existing `.pytest_cache` permission warning in this Windows sandbox, but test execution completed successfully.
+
+## Key Decisions
+- Kept preference extraction, session-memory policy, and profile writeback together in `v2/preference.py` so later scene workers and background refresh code can reuse one deterministic preference surface.
+- Used a `last_writeback_signature` guard in session memory so stable preferences do not enqueue duplicate refresh events when the preference set has not changed.
+- Treated same-category value changes as `preference_corrected` triggers while still preserving the latest session-memory value and merging long-term list-style profile fields per the V2 design.
+
+## Recommended Next Step
+- Start V2-F07 and add `catalog_worker` + `inventory_worker`, then enforce the `default / homepage / product_page / cart` scene-selection behavior against real worker outputs.
+
+## Session Update 2026-04-17
+- Completed V2-F05 by adding the first V2 conversation entrypoints:
+  - `POST /api/v2/sessions`
+  - `POST /api/v2/sessions/{session_id}/messages`
+- Added dedicated V2 API and orchestration modules:
+  - `v2/api_models.py`
+  - `v2/shopping.py`
+  - `v2/session_service.py`
+- Wired `main.py` to expose the V2 routes without changing the legacy V1 recommendation endpoints.
+- Added `ShoppingManager` on top of the existing V2 primitives so a single turn now:
+  - loads persisted session state
+  - applies `PolicyGate`
+  - emits `turn.started / turn.finished` hooks
+  - returns deterministic `reply_ready / needs_clarification / fallback_used`
+  - persists user + assistant turns plus a `task_records` entry
+- Added `tests/test_v2_session_api.py` to verify:
+  - session creation writes durable V2 session state
+  - the message API returns the App Spec response shape
+  - `reply_ready`, `needs_clarification`, and `fallback_used` paths all behave deterministically
+
+## Validation Summary
+- `pytest tests/test_v2_session_api.py -k api -q`
+- `pytest tests/test_v2_session_api.py -q`
+- `python harness/v2/bootstrap.py`
+- `pytest tests/test_v2_runtime_registry.py tests/test_v2_persistence.py tests/test_v2_policy_hook_prompt.py tests/test_v2_session_api.py -q`
+- `pytest tests/test_api.py -q`
+- Result: 4 V2-F05 API tests passed, bootstrap stayed healthy, the focused V2 regression suite passed with 20 tests total, and a lightweight V1 API regression check passed with 3 tests. The V2 track should now report `done=5`, `pending=7`, and `Current next feature: V2-F06 Preference Worker + Session Memory + Profile Writeback`.
+
+## Blockers
+- None for V2-F05.
+- Residual scope note: `products` stays empty in V2-F05 because catalog/inventory/copy workers are intentionally deferred to V2-F07 and V2-F08.
+
+## Key Decisions
+- Kept V2 session orchestration in dedicated `v2/` modules instead of folding it into the legacy V1 supervisor stack.
+- Made `ShoppingManager` deterministic and prompt-registry-backed so the API contract is stable before real worker execution lands.
+- Persisted turns and manager task records during V2-F05 so later preference-memory and background-refresh features can build on existing session history.
+
+## Recommended Next Step
+- Start V2-F06 and replace the inline preference heuristics with a real `Preference Worker`, session-memory stability rules, profile writeback, and `recommendation_refresh` event emission.
+
+## Session Update 2026-04-17
+- Completed V2-F04 by adding three dedicated V2 runtime modules:
+  - `v2/policy.py`
+  - `v2/hooks.py`
+  - `v2/prompts.py`
+- Added `PolicyInput`, `PolicyDecision`, and `PolicyGate` with deterministic `allow / reject / clarify` checks for:
+  - supported scene validation
+  - required `product_page` / `cart` scene context
+  - illegal tool access rejection
+  - missing required field clarification
+- Added `HookBus` with the V2 core hook set and structured `HookResult` outputs, and extended the existing runtime so:
+  - `ToolRegistry.invoke()` emits `tool.before / tool.after / tool.error`
+  - `Worker.run()` emits `worker.started / worker.finished / worker.failed`
+  - hook listeners receive snapshot copies instead of live runtime objects
+- Added `PromptTemplate`, `PromptRegistry`, and `build_default_prompt_registry()` with seeded V2 prompt ids:
+  - `shopping.manager.plan`
+  - `shopping.manager.clarify`
+  - `shopping.manager.respond`
+  - `preference.extract`
+  - `comparison.summarize`
+  - `copy.generate`
+- Updated `v2/__init__.py` exports so later V2 manager/API features can import policy, hook, and prompt primitives from one public surface.
+- Added `tests/test_v2_policy_hook_prompt.py` to deterministically verify:
+  - policy allow/reject/clarify behavior
+  - hook bus listener registration, copy-on-emit isolation, and worker/tool hook integration
+  - prompt version lookup, template validation, and default prompt seeding
+
+## Validation Summary
+- `pytest tests/test_v2_policy_hook_prompt.py -k policy -q`
+- `pytest tests/test_v2_policy_hook_prompt.py -q`
+- `pytest tests/test_v2_runtime_registry.py -q`
+- `python harness/v2/bootstrap.py`
+- `pytest tests/test_v2_harness_bootstrap.py -q`
+- Result: 8 V2-F04 tests passed, 5 runtime regression tests passed, and 2 harness bootstrap tests passed. The V2 track now reports `done=4`, `pending=8`, and `Current next feature: V2-F05 ShoppingManager 与会话 API`. `pytest` still emitted the existing `.pytest_cache` permission warning in this sandbox, but the validation commands themselves completed successfully.
+
+## Blockers
+- None for V2-F04.
+- Residual environment warning: `.pytest_cache` creation is still blocked by the Windows sandbox, though it does not affect test execution.
+
+## Key Decisions
+- Kept policy, hooks, and prompts as separate `v2/` modules while preserving a single public import surface through `v2/__init__.py`.
+- Made `HookBus.emit()` operate on copied snapshots so hook listeners cannot mutate live runtime state and must communicate only through structured return values.
+- Seeded the default prompt registry during V2-F04 so V2-F05+ manager/worker code can depend on stable prompt ids instead of reintroducing hardcoded templates.
+
+## Recommended Next Step
+- Start V2-F05 and wire `ShoppingManager` plus `/api/v2/sessions` and `/messages` onto the new persistence, policy, hook, and prompt primitives.
+
+## Session Update 2026-04-17
+- Completed V2-F03 by adding `v2/persistence.py` with a dedicated SQLite-backed persistence layer for the V2 track.
+- Added `SQLiteDatabase` initialization with schema creation, WAL mode, busy timeout, and foreign-key pragmas for local single-process persistence.
+- Added six V2 stores around the shared V2 contracts:
+  - `SessionStore`
+  - `SessionTurnStore`
+  - `TaskRecordStore`
+  - `UserProfileStore`
+  - `RecommendationSnapshotStore`
+  - `EventStore`
+- Exported the persistence layer from `v2/__init__.py` so later runtime/API features can reuse the same storage surface.
+- Added `tests/test_v2_persistence.py` to deterministically verify:
+  - schema creation for the six required tables and secondary indexes
+  - minimal CRUD round-trips for sessions, turns, task records, profiles, snapshots, and events
+  - restart/reopen recovery against the same SQLite file
+- Updated `tests/test_v2_harness_bootstrap.py` to derive the current next feature from `harness/v2/feature_list.json` instead of hardcoding `V2-F02`, so the bootstrap test remains valid as the V2 track advances.
+- Avoided `pytest`'s default temp fixture in the new persistence test by creating workspace-local temp directories, because the current Windows sandbox blocks the default temp location.
+
+## Validation Summary
+- `pytest tests/test_v2_persistence.py -k schema -q`
+- `pytest tests/test_v2_persistence.py -q`
+- `pytest tests/test_v2_harness_bootstrap.py -q`
+- Result: 3 persistence tests passed and 2 bootstrap tests passed. `pytest` still emitted the existing `.pytest_cache` permission warning in this sandbox, but the validation commands themselves completed successfully.
+
+## Blockers
+- None for V2-F03.
+- Residual environment warning: `.pytest_cache` creation is still blocked by the Windows sandbox, though it does not affect test execution.
+
+## Key Decisions
+- Kept V2 persistence isolated in the top-level `v2/` package so storage code evolves independently from the legacy V1 path.
+- Stored complex fields such as memory, profile lists, snapshot payloads, and event payloads as JSON text to keep the first SQLite schema simple and deterministic.
+- Kept repository APIs narrow and synchronous so the next runtime/API features can compose them without introducing an async database dependency.
+
+## Recommended Next Step
+- Start V2-F04 and build `Policy Gate`, `Hook Bus`, and `PromptRegistry` on top of the new persistence-backed runtime.
+
+## Session Update 2026-04-17
+- Completed V2-F02 by adding a dedicated `v2/` package for shared runtime primitives without mutating the V1 state track.
+- Added `v2/models.py` for the shared V2 contracts: `SessionState`, `ManagerTurnContext`, `WorkerTask`, `WorkerResult`, `TaskRecord`, `PreferenceSignal`, `UserProfile`, `RecommendationSnapshot`, `Event`, `FeedbackEvent`, and `ToolSpec`.
+- Added `v2/runtime.py` for the V2 platform skeleton:
+  - abstract `Manager` / `Worker` base types
+  - `ManagerRegistry`, `WorkerRegistry`, `ToolRegistry`
+  - sync/async tool invocation
+  - tool-only `WorkerExecutionContext` so workers cannot access other workers directly
+- Added `v2/__init__.py` exports and `tests/test_v2_runtime_registry.py` to deterministically verify registry behavior, duplicate registration rejection, sync/async tool execution, task/worker assignment checks, and the worker communication boundary.
+
+## Validation Summary
+- `pytest tests/test_v2_runtime_registry.py -q`
+- `python harness/v2/bootstrap.py --check-track`
+- Result: 5 tests passed and the V2 track consistency check passed.
+
+## Blockers
+- None for V2-F02.
+- The pytest run emitted a cache warning because `.pytest_cache` could not be created in the current Windows sandbox, but test execution completed successfully.
+
+## Key Decisions
+- V2 shared runtime types live in a separate top-level `v2/` package so future persistence/runtime/API features can evolve without overloading the legacy V1 `models/` contracts.
+- `ToolRegistry` stores both the declarative `ToolSpec` and the callable handler so later manager/worker flows can reuse the same registry for validation and execution.
+- Worker execution only receives a tool-scoped runtime context; worker-to-worker communication is excluded from the injected execution surface and verified by tests.
+
+## Recommended Next Step
+- Start V2-F03 and build the SQLite initialization plus repository layer around the new V2 shared types.
+
+## Session Update 2026-04-17
+- Initialized a parallel V2 harness track under `harness/v2/`.
+- Derived `harness/v2/app_spec.md` from `设计V2.md` so the human-readable design remains the source spec and the harness gets a condensed agent-facing spec.
+- Added `harness/v2/feature_list.json`, `harness/v2/validation_matrix.json`, `harness/v2/initializer_report.md`, and `harness/v2/README.md`.
+- Added V2-specific command and skill entrypoints:
+  - `.claude/commands/code-v2.md`
+  - `.codex/skills/code-v2/SKILL.md`
+  - `.codex/skills/code-v2/agents/openai.yaml`
+- Added `harness/v2/bootstrap.py` to validate the V2 track, command docs, feature graph, validation refs, and source-spec refs without touching V1 state files.
+- Added `tests/test_v2_harness_bootstrap.py` as a minimal deterministic validation for the harness bootstrap.
+
+## Validation Summary
+- `python harness/v2/bootstrap.py` should report a healthy V2 track and `Current next feature: V2-F02`.
+- `pytest tests/test_v2_harness_bootstrap.py -q` is the narrow deterministic validation for the bootstrap artifact.
+- V2 track isolation rule: root `feature_list.json` and `claude-progress.txt` are not read or written by `code-v2`.
+
+## Blockers
+- None at track bootstrap time.
+- Future V2 features will need their own concrete tests and runtime code before their `validation_refs` can pass.
+
+## Key Decisions
+- V2 runs as a parallel harness track and does not mutate the completed V1 harness state files.
+- `设计V2.md` remains the human-oriented source document; `harness/v2/app_spec.md` is the distilled initializer output for coding agents.
+- `V2-F01` is marked `done` because the V2 track files, bootstrap entrypoint, and command docs now exist.
+- Future V2 coding loops must use `harness/v2/feature_list.json + harness/v2/claude-progress.txt + harness/v2/validation_matrix.json` as the authoritative external memory.
+- [2026-04-17] Repo refactor + baseline prep：主代码已统一迁移到 `app/shared + app/v1 + app/v2`，V2 worker 进一步拆分到 `api / core / managers / workers / background / reads`；新增 `app/main.py` 主入口，根 `main.py` / `smoke_test.py` / `smoke_test_v2.py` 仅保留兼容 shim；增加 `scripts/v2/background_worker.py`、`perf/k6/*`、`scripts/perf/build_baseline_report.py` 与 `docs/ops/LOCAL_BASELINE.md`，补齐本地 baseline 和独立 background worker 入口。
+- [2026-04-17] After the refactor, `pytest tests -k "test_v2_" -q` now passes with `53` tests, `pytest tests/v1 -q` passes with `41` tests, and the full repository regression target is expected to be higher than the earlier `92`-test snapshot because baseline/report coverage was added.

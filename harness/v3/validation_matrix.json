@@ -1,0 +1,261 @@
+{
+  "track": "harness/v3",
+  "entries": [
+    {
+      "id": "TRACK-FILES",
+      "scope": "track",
+      "commands": [
+        "python harness/v3/bootstrap.py --check-track"
+      ],
+      "success_condition": "bootstrap exits 0 and confirms the V3 track files, feature graph, workspace artifacts, progress handoff, and README tokens are consistent",
+      "artifacts": [
+        "harness/v3/bootstrap.py",
+        "harness/v3/feature_list.json",
+        "harness/v3/claude-progress.txt",
+        "harness/v3/validation_matrix.json",
+        "README.md",
+        "CLAUDE.md"
+      ]
+    },
+    {
+      "id": "TRACK-COMMAND-DOCS",
+      "scope": "track",
+      "commands": [
+        "python harness/v3/bootstrap.py --check-commands"
+      ],
+      "success_condition": "bootstrap exits 0 and confirms the root /code entrypoints and CODEX contract target only the V3 track with workspace-first state drift handling",
+      "artifacts": [
+        ".claude/commands/code.md",
+        ".codex/skills/code/SKILL.md",
+        ".codex/skills/code/agents/openai.yaml",
+        "CODEX.md"
+      ]
+    },
+    {
+      "id": "TRACK-BOOTSTRAP-TEST",
+      "scope": "track",
+      "commands": [
+        "pytest tests/test_v3_harness_bootstrap.py -q"
+      ],
+      "success_condition": "the deterministic bootstrap subprocess tests pass for default output plus --check-track and --check-commands",
+      "artifacts": [
+        "tests/test_v3_harness_bootstrap.py"
+      ]
+    },
+    {
+      "id": "V3-F01-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f01_skeleton.py -q"
+      ],
+      "success_condition": "V3 skeleton imports, settings loading, and /health behavior are verified",
+      "artifacts": [
+        "app/main.py",
+        "app/v3/config/settings.py",
+        "tests/v3/test_f01_skeleton.py"
+      ]
+    },
+    {
+      "id": "V3-F02-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f02_models.py -q"
+      ],
+      "success_condition": "core Pydantic types, roundtrip serialization, and Action discriminated union behavior are verified",
+      "artifacts": [
+        "app/v3/models/__init__.py",
+        "app/v3/models/base.py",
+        "app/v3/models/capability.py",
+        "app/v3/models/decision.py",
+        "app/v3/models/errors.py",
+        "app/v3/models/hooks.py",
+        "app/v3/models/memory.py",
+        "app/v3/models/permissions.py",
+        "app/v3/models/prompts.py",
+        "app/v3/models/session.py",
+        "app/v3/models/stubs.py",
+        "app/v3/models/task.py",
+        "app/v3/models/team.py",
+        "app/v3/models/trace.py",
+        "tests/v3/test_f02_models.py"
+      ]
+    },
+    {
+      "id": "V3-F03-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f03_registry.py -q"
+      ],
+      "success_condition": "CapabilityRegistry and provider abstractions behave deterministically",
+      "artifacts": [
+        "app/v3/registry/capability_registry.py",
+        "app/v3/registry/providers.py",
+        "tests/v3/test_f03_registry.py"
+      ]
+    },
+    {
+      "id": "V3-F04-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f04_hooks.py -q"
+      ],
+      "success_condition": "HookBus registration order, error isolation, and emit semantics are verified",
+      "artifacts": [
+        "app/v3/hooks/hook_bus.py",
+        "tests/v3/test_f04_hooks.py"
+      ]
+    },
+    {
+      "id": "V3-F05-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f05_memory.py -q"
+      ],
+      "success_condition": "SessionMemory, DurableMemory, and MemoryWriteDecision rules are verified",
+      "artifacts": [
+        "app/v3/memory/session_memory.py",
+        "app/v3/memory/durable_memory.py",
+        "app/v3/memory/write_decision.py",
+        "tests/v3/test_f05_memory.py"
+      ]
+    },
+    {
+      "id": "V3-F06-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f06_prompts.py -q"
+      ],
+      "success_condition": "PromptRegistry layering, version selection, and assembly order are verified",
+      "artifacts": [
+        "app/v3/prompts/registry.py",
+        "tests/v3/test_f06_prompts.py"
+      ]
+    },
+    {
+      "id": "V3-F07-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f07_hardening.py -q"
+      ],
+      "success_condition": "PermissionPolicy and HardeningGate guardrail paths are verified",
+      "artifacts": [
+        "app/v3/permissions/policy.py",
+        "app/v3/hardening/gate.py",
+        "tests/v3/test_f07_hardening.py"
+      ]
+    },
+    {
+      "id": "V3-F08-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f08_runtime.py -q"
+      ],
+      "success_condition": "Turn runtime, task scheduling, trace capture, and ContextPacket compression are verified",
+      "artifacts": [
+        "app/v3/runtime/task_board.py",
+        "app/v3/runtime/executor.py",
+        "app/v3/runtime/context_packet.py",
+        "app/v3/runtime/trace_store.py",
+        "tests/v3/test_f08_runtime.py"
+      ]
+    },
+    {
+      "id": "V3-F09-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f09_main_agent.py -q"
+      ],
+      "success_condition": "Main Agent loop decisions, mock LLM paths, and loop exhaustion behavior are verified",
+      "artifacts": [
+        "app/v3/agents/main_agent.py",
+        "app/v3/agents/llm_client.py",
+        "tests/v3/test_f09_main_agent.py"
+      ]
+    },
+    {
+      "id": "V3-F10-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f10_specialist_base.py -q"
+      ],
+      "success_condition": "fixed specialist base behavior, role lookup, and permission boundaries are verified",
+      "artifacts": [
+        "app/v3/specialists/base.py",
+        "app/v3/specialists/team.py",
+        "tests/v3/test_f10_specialist_base.py"
+      ]
+    },
+    {
+      "id": "V3-F11-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f11_tools.py -q"
+      ],
+      "success_condition": "mock tool providers and seed product catalog behavior are verified",
+      "artifacts": [
+        "app/v3/tools/catalog_search.py",
+        "app/v3/tools/inventory_check.py",
+        "app/v3/tools/product_compare.py",
+        "app/v3/tools/seed_data.py",
+        "tests/v3/test_f11_tools.py"
+      ]
+    },
+    {
+      "id": "V3-F12-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f12_mcp.py -q"
+      ],
+      "success_condition": "MCP client, MCP provider, and mock server RAG flow are verified",
+      "artifacts": [
+        "app/v3/tools/mcp_client.py",
+        "app/v3/tools/mcp_provider.py",
+        "app/v3/tools/mcp_mock_server",
+        "tests/v3/test_f12_mcp.py"
+      ]
+    },
+    {
+      "id": "V3-F13-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f13_domain_specialists.py -q"
+      ],
+      "success_condition": "domain specialist role prompts, evidence references, and allowed capability scopes are verified",
+      "artifacts": [
+        "app/v3/specialists/shopping_brief.py",
+        "app/v3/specialists/candidate_analysis.py",
+        "app/v3/specialists/comparison.py",
+        "app/v3/specialists/recommendation_rationale.py",
+        "tests/v3/test_f13_domain_specialists.py"
+      ]
+    },
+    {
+      "id": "V3-F14-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/test_f14_api.py -q"
+      ],
+      "success_condition": "V3 session, message, and trace endpoints plus middleware behavior are verified",
+      "artifacts": [
+        "app/v3/api/sessions.py",
+        "app/v3/api/messages.py",
+        "app/v3/api/trace.py",
+        "app/v3/api/middleware.py",
+        "tests/v3/test_f14_api.py"
+      ]
+    },
+    {
+      "id": "V3-F15-SMOKE",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/v3/smoke tests/v3/test_f15_smoke.py -q"
+      ],
+      "success_condition": "the three V3 smoke scenarios and observability assertions pass together",
+      "artifacts": [
+        "app/v3/observability/logging_config.py",
+        "tests/v3/smoke",
+        "tests/v3/test_f15_smoke.py"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+# Claude Progress — 智能电商推荐系统
+
+## Status: F12 done, feature backlog complete
+## Session Update 2026-04-16
+- Completed F12 observability by adding `services/metrics.py` for in-memory agent metrics and `services/logging_utils.py` for structured JSON logging with automatic `trace_id` injection.
+- Wired `BaseAgent` result recording into the metrics collector, added `/metrics` plus `/api/v1/metrics`, and logged request / supervisor completion with per-stage latency maps.
+- Added `tests/test_observability.py` and updated `tests/test_api.py` fixture resets to validate metrics counts, degraded error-rate tracking, and JSON log payloads.
+- Validation:
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_observability.py tests/test_api.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe smoke_test.py`
+- Result: 41 tests passed, and the smoke script completed successfully.
+- Environment note: the startup ritual `bash init.sh` could not run in the current sandbox because Bash instance creation is denied (`Bash/Service/CreateInstance/E_ACCESSDENIED`).
+- Recommended next step: the listed feature backlog is complete; if needed, do a manual walkthrough of `/recommend` and `/metrics` before packaging or demoing.
+## Status: F11 done, next up F12
+## Session Update 2026-04-16
+- Completed F11 by adding `smoke_test.py`, an end-to-end demo runner that exercises 5 seeded users through `/api/v1/recommend` and verifies the three App Spec smoke scenarios.
+- Kept the smoke flow in-process with FastAPI `TestClient`, added a targeted zero-inventory Supervisor override for the stock filtering scenario, and returned a structured summary so the script is also easy to validate from pytest.
+- Added runtime bootstrap logic in `smoke_test.py` so `python smoke_test.py` can relaunch under a Python interpreter that has FastAPI installed when the current shell's default Python does not.
+- Added `tests/test_smoke_test.py` to cover the demo script and verify the expected hot-start, cold-start, and copy-personalization outcomes.
+- Validation:
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_smoke_test.py -p no:cacheprovider`
+- `python smoke_test.py`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests -p no:cacheprovider`
+- Result: 39 tests passed, and the smoke script completed successfully.
+- Environment note: the required startup `bash init.sh` check still fails in the current environment because the script is stored with CRLF line endings (`set: pipefail\r: invalid option name`).
+- Recommended next step: start F12 and add request/agent metrics plus structured logging output that includes `trace_id`.
+## Session Update 2026-04-16
+- Completed F10 optional LLM reranking in `ProductRecAgent`, gated by A/B experiment parameters so `control` stays rule-based while `treatment` calls the rerank path.
+- Added `experiment_name` / `experiment_parameters` to `ProductRecInput`, forwarded them through `Supervisor`, and extended `LLMService` mock responses so treatment works without a real API key.
+- Added focused tests for control-vs-treatment rerank behavior plus a Supervisor integration test to verify the experiment parameters reach the rerank phase.
+- Validation:
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_product_rec_agent.py -k control_variant -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_product_rec_agent.py -k treatment_variant -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_supervisor.py -k treatment_experiment_parameters -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests -p no:cacheprovider`
+- Result: 38 tests passed.
+- Environment note: `bash init.sh` still cannot complete cleanly in the current WSL/Bash environment because the script is checked in with CRLF line endings (`set: pipefail\r: invalid option name`), so validation for F10 was completed via pytest instead.
+- Recommended next step: start F11 and add a `smoke_test.py` flow that exercises the three demo scenarios end-to-end against the seeded data.
+
+## 项目状态：F12 完成，功能清单已全部完成
+
+## 已完成
+- [2026-04-12] Initializer 阶段：App Spec 定稿，feature_list.json 拆解完成（12 个 feature），init.sh 就绪
+- [2026-04-12] F01 项目骨架：FastAPI + pydantic-settings 配置 + 目录结构
+- [2026-04-12] F02 Base Agent 框架：执行循环 + 指数退避重试 + asyncio 超时 + 降级返回默认结果
+- [2026-04-16] F03 用户画像 Agent：补齐领域模型 / Agent IO / mock FeatureStore / mock+OpenAI 兼容 LLMService / UserProfileAgent；有历史行为返回结构化画像，无历史行为直接走 cold start
+- [2026-04-16] F04 商品推荐 Agent：新增 mock ProductCatalog、规则化粗召回与基于画像的重排逻辑；输出 Top-N 商品列表并通过 Pydantic schema 校验，冷启动走粗召回
+- [2026-04-16] F05 库存校验 Agent：新增 InventoryStatus / InventoryInput / InventoryOutput、mock InventoryStore、InventoryAgent；零库存过滤、低库存预警、缓存兜底全部落地
+- [2026-04-16] F06 营销文案 Agent：新增 MarketingCopy 领域模型 / Agent IO / MarketingCopyAgent；按用户分群选择 5 套风格模板、调用 LLM 生成商品文案、做广告法敏感词替换，超时或失败时回退商品默认描述
+- [2026-04-16] F07 Supervisor 编排器：新增 RecommendationRequest / RecommendationResponse / AgentExecutionDetail、Supervisor 三阶段编排；Phase 1 并行跑画像+粗召回，Phase 2 并行跑精排+库存，按库存结果强校验过滤后再串行生成文案；补齐完整结果、文案降级、库存缓存兜底、并行耗时 4 条验收测试
+- [2026-04-16] F08 A/B 测试引擎：新增 ABTestEngine、默认 `rec_strategy` 实验、稳定 MD5 分桶、多实验配置、Thompson Sampling 动态分流和模拟点击结果记录；补齐 4 条测试覆盖稳定分桶、参数差异、近似均匀初始分布和收敛行为
+- [2026-04-16] F09 API 层：新增 trace-id 中间件、共享 `POST /recommend` 与 `POST /api/v1/recommend` 接口、接入 ABTestEngine 请求分配并返回 `experiment_group`；响应头补齐 `X-Trace-ID`，响应体补齐 `latency_ms`，未知用户经 Supervisor 正常走冷启动而非 500
+- [2026-04-16] F10 LLM 重排（可选增强）：在 `ProductRecAgent` 中增加 A/B 参数驱动的可选 LLM 重排；`control` 保持规则排序且不触发 LLM，`treatment` 走 LLM 重排但保持与规则排序完全一致的输出 schema；Supervisor 将实验参数透传到重排阶段，mock LLM 也支持无 key 的稳定测试
+- [2026-04-16] F11 演示数据 + 冒烟测试：新增 `smoke_test.py`，串起 5 个种子用户的 `/api/v1/recommend` 调用并校验三类演示场景；针对零库存场景注入专用 Supervisor 覆盖库存数据；补充 `tests/test_smoke_test.py`，并让 `python smoke_test.py` 在默认 Python 缺少 FastAPI 依赖时自动切换到可用解释器执行
+- [2026-04-16] F12 可观测性：新增 `services/metrics.py` 与 `services/logging_utils.py`，为各 Agent 采集调用次数 / 平均耗时 / 错误率；开放 `/metrics` 与 `/api/v1/metrics`；全链路日志改为 JSON 并自动注入 `trace_id`，请求完成日志包含各 Agent 阶段耗时
+
+## 当前阻塞
+（无）
+
+## 关键决策记录
+- LLM 只用于文案生成 + 可选重排（通过 A/B 开关），不参与主推荐决策
+- 库存校验为关键链路（强校验 + 缓存兜底），文案为可降级链路
+- 首期外部服务（Redis/Milvus）用 mock，后续按需接入真实服务
+- 演示环境使用模拟点击数据验证 A/B 效果
+- Python 环境注意：系统有 Python 3.11 和 3.13 两个版本，pip 默认装到 3.13，需用 python -m pip 确保装到 3.11；启动用 python -m uvicorn
+- BaseAgent 设计：超时直接降级不重试（超时通常是下游服务整体不可用，重试无意义）；普通异常走指数退避重试
+- AgentResult 用 Pydantic 模型统一包装（success/data/degraded/attempts/error/latency_ms），方便下游 Supervisor 编排判断
+- F03 以 设计.md 为技术边界实现，不额外扩展未列出的能力；LLM API key 为空时走确定性 mock 分析，真实 key 存在时走 OpenAI 兼容接口
+- F03 冷启动策略不调用 LLM，直接返回 `cold_start=true`、热门品类标签和 `new_user` segment
+- F03 的 LLM 非法 JSON 视为普通异常，沿用 BaseAgent 重试语义；重试耗尽后降级为 cold start
+- F04 当前只实现规则排序链路：无 profile 或 `cold_start=true` 时走粗召回，有 profile 时基于品类偏好 / 价格区间 / 标签 / segment 做重排；LLM 重排保留到 F10
+- Product 领域模型内部字段使用 `product_id`，对外序列化为 `id`，这样既满足当前 API/schema 验收，也给后续库存校验保留稳定主键
+- F05 将库存状态和过滤后商品一起返回；缓存兜底只返回“已有库存校验结果”的商品，避免未验证商品继续进入下游链路
+- F06 文案模板优先级为 `new_user > high_value > churn_risk > price_sensitive > active`，同一用户命中多个 segment 时按该顺序选择单一模板，避免风格互相污染
+- F06 的 LLM mock 扩展为同时支持画像分析和文案生成；文案链路统一使用 `marketing_copy_input` JSON 载荷，保证无外部依赖时也能稳定测试不同风格输出
+- F06 合规过滤放在 Agent 内部收口，先接收 LLM 原始文案，再对“最好”“100%”等敏感词做替换；如果 LLM 超时或返回不可用 JSON，则整批降级为商品默认描述
+- F07 的 Supervisor 固定为 3 阶段 DAG：`画像 + 粗召回` 并行、`精排 + 库存` 并行、`文案` 串行；粗召回候选数固定为 `num_items * 3`
+- F07 最终推荐结果始终以库存校验结果为准：输出商品 = `精排顺序 ∩ 已校验且可售商品`，不允许未校验商品穿透到最终响应
+- F07 优先复用画像 Agent 的降级 cold start profile；如果画像 payload 本身不可解析，再回退到无画像推荐路径
+- F07 文案结果按最终商品 ID 对齐；如文案缺失则补商品默认描述，确保 `copies` 与 `recommendations` 一一对应
+- F08 对“同一用户固定分桶”和“动态流量调配”采用分离策略：用户首次命中实验时基于 `MD5(experiment:user_id)` 取稳定 bucket，再按当下 Thompson Sampling 估算流量区间分配 variant；一旦分配后写入内存 assignment，后续调用不漂移
+- F08 默认实验 `rec_strategy` 直接产出后续 F10 所需策略参数：`control` 返回 `rerank_enabled=false`，`treatment` 返回 `rerank_enabled=true`
+- F08 Thompson Sampling 使用标准库 `random.betavariate` 和 Beta 后验（`alpha=prior+successes`, `beta=prior+failures`），避免引入 numpy 等额外依赖
+- F10 的 LLM 重排只改变候选商品顺序，不改变 `Product` 输出结构；重排后沿用规则排序阶段生成的递减 score 序列，保证 treatment 路径和 control 路径的 schema 以及排序字段语义保持一致
+- F10 若 LLM 返回无效结果，则在 `ProductRecAgent` 内部直接回退到规则排序结果而不是整条推荐链路降级；这样 treatment 组仍然稳定返回可用推荐，同时将 LLM 重排视为可选增强而非核心依赖
+
+## F02 实现细节
+- agents/base.py: BaseAgent 抽象基类，子类实现 execute() 和 default_result()
+- models/agent_result.py: AgentResult 统一结果模型
+- run() 方法流程：timeout→立即降级 | exception→指数退避重试→耗尽降级
+- 11 个测试全覆盖（tests/test_base_agent.py）
+- 新增依赖：pytest, pytest-asyncio
+
+## F03 实现细节
+- models/domain.py：新增 UserSegment / RFMScore / UserProfile / BehaviorEvent / UserBehaviorSummary
+- models/agent_io.py：新增 UserProfileInput / UserProfileOutput，保持 BaseAgent 的 dict 契约同时用 Pydantic 做 IO 校验
+- services/feature_store.py：内存 mock 用户行为数据，负责聚合浏览/点击/购买行为并计算 RFM
+- services/llm_service.py：封装 OpenAI 兼容调用；无 key 或无 openai 包时回退到确定性 mock 响应
+- agents/user_profile.py：实现 prompt 构建、LLM 画像解析、cold start 兜底和默认降级结果
+- tests/test_user_profile_agent.py：覆盖历史用户结构化画像、无历史用户 cold start、LLM 非法 JSON 降级三条路径
+- requirements.txt：按设计文档补充 `openai>=1.0.0`
+
+## F04 实现细节
+- models/domain.py：新增 Product 领域模型，内部保留 `product_id`，输出时通过 alias 序列化为 `id`
+- models/agent_io.py：新增 ProductRecInput / ProductRecOutput，延续 BaseAgent 的 dict 契约并用 Pydantic 校验推荐结果
+- services/product_catalog.py：提供内存 mock 商品库（17 个商品，覆盖手机/耳机/平板/配件/穿戴/显示器/家电/家居等品类）和粗召回 fallback
+- agents/product_rec.py：实现 ProductRecAgent，支持冷启动粗召回、基于画像的规则重排，以及 catalog 故障时的降级兜底
+- tests/test_product_rec_agent.py：覆盖 Top-10 推荐、schema 校验、冷启动粗召回、catalog 故障降级四条路径
+
+## F05 实现细节
+- models/domain.py：新增 `InventoryStatus`，统一描述库存可售性、low_stock 标记和限购策略
+- models/agent_io.py：新增 `InventoryInput` / `InventoryOutput`，输出同时包含过滤后的商品列表、完整库存状态和 `used_cache`
+- services/inventory_store.py：实现内存库存主存储 + 缓存副本；live 查询成功时刷新缓存，失败时由 Agent 默认结果读取缓存
+- agents/inventory.py：实现 `InventoryAgent`，复用 BaseAgent 的超时/重试/降级流程；零库存商品直接剔除，低库存商品保留并打标
+- tests/test_inventory_agent.py：覆盖零库存过滤、低库存预警、live 查询失败后缓存兜底三条验收路径
+
+## F06 实现细节
+- models/domain.py：新增 `MarketingCopy`，统一描述单商品文案输出结构
+- models/agent_io.py：新增 `MarketingCopyInput` / `MarketingCopyOutput`，约束画像+商品输入与文案列表输出
+- services/llm_service.py：保留原有画像 mock，同时扩展 `marketing_copy_input` 文案 mock 响应，支持按模板生成确定性文案
+- agents/marketing_copy.py：实现 `MarketingCopyAgent`，包含模板选择、prompt 构建、LLM 结果解析、敏感词过滤和默认描述降级
+- tests/test_marketing_copy_agent.py：覆盖不同画像输出不同风格、敏感词过滤、LLM 超时回退默认描述三条验收路径
+
+## F07 实现细节
+- models/domain.py：新增 `AgentExecutionDetail`、`RecommendationRequest`、`RecommendationResponse`，为编排层输出提供统一 Pydantic 契约
+- orchestrator/supervisor.py：实现 `Supervisor` 三阶段编排，复用现有 4 个 Agent，其中推荐 Agent 执行两次（粗召回 / 精排）
+- orchestrator/supervisor.py：Phase 1 用 `asyncio.gather()` 并行拉取画像和候选商品；Phase 2 并行做精排和库存校验；中间阶段按库存结果过滤精排输出并截断到 `num_items`
+- orchestrator/supervisor.py：文案阶段串行执行，保留文案 Agent 降级结果；同时记录 `user_profile`、`product_rec_coarse`、`product_rec_ranked`、`inventory`、`marketing_copy` 五个阶段的执行详情
+- tests/test_supervisor.py：覆盖完整结果聚合、文案超时降级、库存缓存兜底且不泄露未校验商品、并行阶段总耗时接近最慢 Agent 四条路径
+
+## F08 实现细节
+- services/ab_test.py：新增 `ABTestEngine`，内置默认 `rec_strategy` 实验（`control`/`treatment`），支持传入多实验配置
+- services/ab_test.py：`assign_user()` 使用稳定 MD5 bucket + Thompson Sampling 概率区间给新用户分桶，并缓存 assignment 保证同用户重复调用始终返回同一实验组
+- services/ab_test.py：`record_result()` / `record_variant_result()` 记录模拟点击结果，更新每个 variant 的 successes/failures 和 Beta 后验参数
+- services/ab_test.py：`get_variant_probabilities()` / `get_best_variant()` / `get_experiment_stats()` 提供动态流量分配、当前优胜 variant 和实验统计快照
+- tests/test_ab_test.py：覆盖同用户稳定分桶、多实验配置与不同策略参数、初始近似均匀分流、Thompson Sampling 收敛到更优 variant 四条路径
+
+## 验证记录
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_user_profile_agent.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_base_agent.py tests/test_user_profile_agent.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_product_rec_agent.py -k top_10 -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_product_rec_agent.py -k schema_validated -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_product_rec_agent.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_base_agent.py tests/test_user_profile_agent.py tests/test_product_rec_agent.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_inventory_agent.py -k zero_stock -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_inventory_agent.py -k low_stock -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_inventory_agent.py -k cached -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_inventory_agent.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_base_agent.py tests/test_user_profile_agent.py tests/test_product_rec_agent.py tests/test_inventory_agent.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_marketing_copy_agent.py -k different_styles -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_marketing_copy_agent.py -k sensitive_words -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_marketing_copy_agent.py -k timeout -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_base_agent.py tests/test_user_profile_agent.py tests/test_product_rec_agent.py tests/test_inventory_agent.py tests/test_marketing_copy_agent.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_supervisor.py -k complete -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_supervisor.py -k marketing_copy -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_supervisor.py -k inventory_cache -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_supervisor.py -k slowest_agent -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_supervisor.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_base_agent.py tests/test_user_profile_agent.py tests/test_product_rec_agent.py tests/test_inventory_agent.py tests/test_marketing_copy_agent.py tests/test_supervisor.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_ab_test.py -k same_user -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_ab_test.py -k "multi_experiment or distribution" -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_ab_test.py -k thompson -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_ab_test.py -p no:cacheprovider`
+- `D:\ProgramFiles\anaconda3\python.exe -m pytest tests/test_base_agent.py tests/test_user_profile_agent.py tests/test_product_rec_agent.py tests/test_inventory_agent.py tests/test_marketing_copy_agent.py tests/test_supervisor.py tests/test_ab_test.py -p no:cacheprovider`
+- 结果：当前回归集 32 tests passed
+
+## 环境备注
+- 默认 PATH 上的 MSYS2 Python 缺少项目依赖，且安装 `pydantic-core` 时平台 wheel 不兼容；验证改用 `D:\ProgramFiles\anaconda3\python.exe`
+- `bash init.sh` 申请越权后可执行到真实 Bash，但当前 WSL/Bash 环境对脚本 CRLF 行尾不兼容，触发 `set: pipefail\r: invalid option name`；本次仍以 pytest 验证 F07 交付物
+
+## 下一步
+- `feature_list.json` 中的 12 个 feature 已全部完成；如需继续推进，建议先手动 walkthrough `/recommend` 与 `/metrics`，再做打包、部署或演示环境加固。

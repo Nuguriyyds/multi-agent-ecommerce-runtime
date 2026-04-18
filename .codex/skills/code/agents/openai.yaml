@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code"
+  short_description: "Run the repo's V3 /code feature workflow with workspace-first state drift checks."
+  default_prompt: "Use $code to run the workspace-first V3 harness workflow from harness/v3/ and stop on state drift."

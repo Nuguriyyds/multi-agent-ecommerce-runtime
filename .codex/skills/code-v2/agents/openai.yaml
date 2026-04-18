@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code V2"
+  short_description: "Run the repository's V2 harness coding loop."
+  default_prompt: "Use $code-v2 to run the V2 harness workflow from harness/v2/."

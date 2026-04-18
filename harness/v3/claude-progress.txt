@@ -1,0 +1,223 @@
+# V3 进度交接（每轮 coding agent 读写）
+
+状态文件规则：
+- 每次 /code 会话开始前读本文件，了解"上一个 agent 做到哪"
+- 完成一个 feature 后，更新"已完成"列表，写关键决策和对下一轮的提示
+- 只动"当前正在做" / "已完成" / "关键决策" / "下一步建议" / "未解决" 五块
+- 不要把设计讨论写进这里，只写"事实"和"提示"
+
+---
+
+## 当前正在做的 feature
+
+- ID: —
+- 状态: 空闲（V3-F15 已完成，V3 backlog cleared）
+- 开始时间: —
+- 预期完成判据: 如继续维护，先运行 `.\.venv\Scripts\python.exe harness/v3/bootstrap.py` / track checks，确认 handoff 与工作区一致
+
+## 已完成的 feature
+
+- V3-F01 / 工程骨架 + V3 目录 + 配置 / 完成时间: 2026-04-18
+- V3-F02 / 核心 Pydantic 类型库 / 完成时间: 2026-04-18
+- V3-F03 / Capability Registry + Provider 抽象（含 MCP） / 完成时间: 2026-04-18
+- V3-F04 / Hook System / 完成时间: 2026-04-18
+- V3-F05 / 两层 Memory 系统 / 完成时间: 2026-04-18
+- V3-F06 / Prompt Registry（分层） / 完成时间: 2026-04-18
+- V3-F07 / Permission + Hardening Gate / 完成时间: 2026-04-18
+- V3-F08 / Turn Runtime + TaskBoard + ContextPacket + TraceStore / 完成时间: 2026-04-18
+- V3-F09 / Main Agent Loop + Action Set + LLM 集成 / 完成时间: 2026-04-18
+- V3-F10 / Fixed Specialist 基类 + Team Protocol / 完成时间: 2026-04-18
+- V3-F11 / 本地 Mock 工具 + 商品目录 / 完成时间: 2026-04-18
+- V3-F12 / MCP 客户端 + Mock Server + RAG 风格工具 / 完成时间: 2026-04-18
+- V3-F13 / 4 个领域 Specialists / 完成时间: 2026-04-18
+- V3-F14 / HTTP API 层（3 端点 + 中间件） / 完成时间: 2026-04-18
+- V3-F15 / Smoke Test（3 场景）+ 可观测性 / 完成时间: 2026-04-18
+
+## 关键决策与偏差记录
+
+- 2026-04-18 / V3-F14 完成:
+  - 产出: `app/v3/api/{__init__,sessions,messages,trace,middleware}.py`、`app/main.py`、`tests/v3/test_f14_api.py`
+  - 决策: V3 API 在 `create_app()` 中统一装配，复用同一个 `MainAgent`、`CapabilityRegistry`、mock tools、MCP tools 与 fixed specialists；session 生命周期放在 API 层的 in-memory `SessionStore`，不改 F08/F09 共享 runtime 契约
+  - 决策: `X-Trace-ID` header 与 `latency_ms` 仅对 `/api/v3/*` 响应注入，避免破坏 `/health` 既有返回；`/messages` 与 `/trace` 优先回传 turn trace_id，其他 API 请求使用 HTTP trace_id
+  - 决策: session 过期规则固定为“`turn_count >= max_turns` 的后续 `/messages` 返回 409”与“idle 超过 30 分钟返回 409”；过期时只清空 `session working memory`，保留 durable memory 与已保存 trace
+  - 残余风险: spec §13.2 提到的“第 20 轮总结回复”仍沿用现有 MainAgent/runtime 行为；F14 只负责在后续 `/messages` 上返回 409，如需专门总结策略需在后续 feature 补 turn-level orchestration
+  - 验证: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f14_api.py -q`
+  - 回归: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f01_skeleton.py -q`
+  - Next recommended step: start V3-F15 Smoke Test（3 场景）+ 可观测性；优先复用 F14 三个 API 端点、F13 specialists 和 trace/logging 输出
+
+- 2026-04-18 / V3-F13 完成:
+  - 产出: `app/v3/specialists/{shopping_brief,candidate_analysis,comparison,recommendation_rationale}.py`、`app/v3/specialists/__init__.py`、`tests/v3/test_f13_domain_specialists.py`
+  - 决策: 4 个领域 specialist 继续继承 F10 `Specialist`，只返回 `SpecialistObservation`，不新增并行团队协议；role prompt 通过 F06 `PromptRegistry` 注册，避免硬编码到 Main Agent
+  - 决策: `shopping_brief` 的结构化 slots 使用模块内 Pydantic payload model 校验，缺失或不完整槽位写入 `slots_missing`；不修改已完成的 F02 共享模型
+  - 决策: `candidate_analysis` 的每条 `fit_reasons` 都引用 catalog_search observation_id；`comparison` 只保留 `price/battery/noise_cancel/weight/warranty/brand` 白名单维度；`recommendation_rationale` 的每条 rationale 都引用 catalog/inventory/compare/rag observation_id，并可调用 F12 `rag_product_knowledge`
+  - 验证: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f13_domain_specialists.py -q`
+  - 回归: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f06_prompts.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f07_hardening.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f10_specialist_base.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f11_tools.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f12_mcp.py -q`
+  - Next recommended step: start V3-F14 HTTP API 层（3 端点 + 中间件）；优先复用 F08 `TraceStore`、F09 `MainAgent` / runtime path，并确保 session expiry 返回 409、响应带 `X-Trace-ID` 与 `latency_ms`
+
+- 2026-04-18 / state drift detected before starting the next feature / 原因: `.\.venv\Scripts\python.exe harness/v3/bootstrap.py` failed because `harness/v3/feature_list.json` marks `V3-F12` as `done` while this handoff file still showed `当前正在做: V3-F12 / 待开始` and omitted `V3-F12` from the completed list; per workspace-first contract the session must stop until track metadata is reconciled
+- 2026-04-18 / Next recommended step: reconcile V3-F12 status in this handoff with `feature_list.json`, rerun `.\.venv\Scripts\python.exe harness/v3/bootstrap.py`, and only then start the next unblocked feature (currently V3-F13)
+- 2026-04-18 / `/code` 切换为 workspace-first / 原因: 当前工作区是权威事实源，状态优先级固定为 workspace files > harness/v3/feature_list.json > harness/v3/claude-progress.txt > git log；如冲突必须报 state drift 并先修复
+- 2026-04-18 / V3-F03 保持 pending，直到工作区产物齐全 / 原因: 当前工作区尚无 `app/v3/registry/capability_registry.py`、`app/v3/registry/providers.py` 与 `tests/v3/test_f03_registry.py`，不能仅凭历史描述或会话印象标记完成
+- 2026-04-18 / V3-F05 keeps durable gating in `MemoryWriteDecision.evaluate` / reason: durable writes now have one deterministic rule shared by `DurableMemory` and later runtime code
+- 2026-04-18 / V3-F05 session views use `MappingProxyType` over deep-copied values / reason: `get_view()` must be read-only without exposing mutable backing state
+- 2026-04-18 / Next recommended step: start V3-F06 Prompt Registry / reason: it is the next unblocked feature after F05 and only depends on V3-F02
+- 2026-04-18 / V3-F06 defines latest prompt version as the most recently registered version for a given `(layer, name)` / reason: spec requires deterministic latest selection but does not define semantic-version ordering
+- 2026-04-18 / V3-F06 assembly only auto-selects a layer when that layer has exactly one registered prompt name / reason: F13 will register multiple role prompts, so silent auto-picking would make role assembly ambiguous
+- 2026-04-18 / Next recommended step: start V3-F07 Permission + Hardening Gate / reason: it is the next unblocked feature after F06 and its dependencies (F02/F03/F04) are already done
+- 2026-04-18 / V3-F07 keeps `PermissionPolicy.check(actor, capability)` on the shared model contract and re-exports it from `app/v3/permissions/policy.py` / reason: later runtime and specialist code can reuse one deterministic policy path without wrapping or duplicating permission logic
+- 2026-04-18 / V3-F07 writes rejection provenance into `TraceRecord.fallback_reason` as `permission:<guardrail>` or `gate:<guardrail>` / reason: F08 runtime and later trace APIs need a stable, source-tagged explanation for controlled fallback
+- 2026-04-18 / V3-F07 schema validation only covers the JSON-schema subset used by `CapabilityDescriptor.input_schema` (`object` / `array` / scalar types + `required` + `additionalProperties`) / reason: keep V3.0 deterministic and dependency-light while covering current invocation contracts
+- 2026-04-18 / Next recommended step: start V3-F08 Turn Runtime + TaskBoard + ContextPacket + TraceStore / reason: it is the next unblocked feature after F07 and its dependencies (F02/F04/F05/F07) are already done
+- 2026-04-18 / V3-F08 keeps `TurnTaskBoard` behavior on the shared Pydantic model and re-exports it from `app/v3/runtime/task_board.py` / reason: runtime context and later features already depend on the shared `TurnTaskBoard` type, so dual task-board classes would create drift
+- 2026-04-18 / V3-F08 `ContextPacketBuilder` drops any key named `inferred` and any mapping with `source=inferred` / reason: compressed context must not upgrade inferred data into stable runtime facts
+- 2026-04-18 / V3-F08 `SerialExecutor` is driven by an injected decision provider and the shared `CapabilityRegistry` / reason: F08 only establishes turn runtime plumbing; F09 can plug Main Agent decisions into the same task/trace path without rewriting execution control
+- 2026-04-18 / Next recommended step: start V3-F09 Main Agent + LLM Client / reason: it is the next unblocked feature after F08 and depends on F06/F07/F08
+- 2026-04-18 / V3-F09 keeps Main Agent on top of `SerialExecutor` instead of introducing a second loop / reason: trace capture, task transitions, hook emission, and tool/sub-agent execution should continue to flow through the shared F08 runtime path
+- 2026-04-18 / V3-F09 routes prompt construction through `PromptRegistry.assemble()` with explicit platform/scenario/role/task_brief selections / reason: the decision prompt must stay layered and deterministic even after F13 adds more role prompts
+- 2026-04-18 / V3-F09 mock LLM responses advance by scenario key and per-key sequence index / reason: one turn needs deterministic multi-step decisions (for example call_tool -> reply) without adding hidden retries or ad-hoc branch state
+- 2026-04-18 / V3-F09 infers `need_expression` before the first observation and upgrades to `advice` after observations exist / reason: the existing F07 node whitelist must allow both clarification-first and tool-then-reply paths without rewriting the runtime
+- 2026-04-18 / Next recommended step: start V3-F10 Fixed Specialist 基类 + Team Protocol / reason: it is the next unblocked feature after F09 and depends only on F03/F07/F08, which are all done
+- 2026-04-18 / V3-F10 keeps `Specialist` as a `SubAgentProvider` over the shared `CapabilityRegistry` / reason: fixed specialists must register and execute through the same F03 provider contract as other sub-agent capabilities
+- 2026-04-18 / V3-F10 gates specialist tool usage with `SpecialistBrief.allowed_capabilities` plus `PermissionPolicy.check(...)` / reason: specialist-internal tool calls need deterministic F07-compatible scope checks before touching registry tools
+- 2026-04-18 / V3-F10 keeps `app/v3/specialists/team.py:AgentTeam` as a lightweight role registry with `snapshot()` back to `models.AgentTeam` / reason: F10 needs role-based dispatch now without mutating the shared F02 team model into dynamic runtime state
+- 2026-04-18 / Next recommended step: start V3-F11 本地 Mock 工具 + 商品目录 / reason: it is the next unblocked feature after F10 and gives F13 specialists real catalog capabilities to call
+- 2026-04-18 / V3 架构从零开始 / 原因: V3 是中心化 Main-Agent 平台，与 V1 DAG / V2 ShoppingManager 架构根本不同，不复用 BaseAgent，V1/V2 代码归档到 archive/legacy-v1-v2/
+- 2026-04-18 / Hook System 提前到 F04（F05 之前）/ 原因: 后续 F07 / F08 / F09 都需要 emit hook，提前落位避免三次倒插 emit 点
+- 2026-04-18 / F11 拆分为 Mock 工具 + 商品目录（独立于 specialist）/ 原因: 原计划 F11 捆绑 4 specialist + 3 tool + seed 数据，超过单会话规模；现 F11 只做工具和 seed，后续 feature 专做 specialist
+- 2026-04-18 / Action 用 discriminated union（pydantic v2 Tagged Union）/ 原因: LLM 输出 JSON 带 kind 字段更容易反序列化分派；失败即 fallback，不靠继承
+- 2026-04-18 / 新增 V3-F12: MCP 客户端 + Mock Server + RAG 工具 / 原因: 用户要求外部工具（RAG 等）通过 MCP 注册给 sub-agent 使用。V3-F03 扩展出 MCPProvider 抽象，V3-F12 落地客户端 + mock server + 一个 rag_product_knowledge 工具。总 feature 数从 14 变为 15，原 F12/F13/F14 顺延为 F13/F14/F15
+- 2026-04-18 / feature_list.json 增加 spec_reference + implementation_notes / 原因: 防 vibe coding。每个 feature 挂 docs/app_spec.md 的权威章节号；高风险 feature（F05/F07/F08/F09/F10/F12/F13）加 implementation_notes 列关键设计约束
+- 2026-04-18 / 新增 bootstrap.py + validation_matrix.json + CODEX.md / 原因: `/code` 和 `$code` 默认都要收敛到 V3；用 bootstrap 自检轨道、用 validation_refs 固化确定性验证入口，避免误读旧轨道状态文件
+- 2026-04-18 / V3 开发契约固定为 repo-local `.venv` + fresh coding-agent session / 原因: 当前机器上全局 `python`、`pytest` 来源不一致，必须把每轮 `/code` 会话和所有开发命令收敛到同一个仓库内解释器，避免 bootstrap 与验证漂移
+- 2026-04-18 / V3-F01 使用 ECOV3_ 前缀的 pydantic-settings + 缓存 getter / 原因: 配置读取需要与 V1/V2 隔离，并为后续 FastAPI/runtime 复用提供稳定入口
+- 2026-04-18 / app.main 采用 create_app() + 全局 app 保留 / 原因: 先满足当前 /health 契约，同时给后续 V3 API 路由挂载和测试注入 settings 留扩展点
+- 2026-04-18 / V3-F02 只落模型契约，不提前实现 registry/runtime 行为 / 原因: spec §10 的职责是稳定类型边界；把执行逻辑带进来会和 F03/F08/F09 的验收边界重叠
+- 2026-04-18 / Action union 固定为 5 个显式子类 + `kind` 判别字段 + 共享 `ACTION_TYPE_ADAPTER` / 原因: 后续 F07/F09 需要同一套 JSON 反序列化入口处理 LLM 决策和 guardrail 校验
+- 2026-04-18 / F02 补齐 stub 与枚举 roundtrip 测试到单一入口 `tests/v3/test_f02_models.py` / 原因: 让类型语义只在一个测试文件验收，避免后续 feature 各自复制 fixture 漂移
+- 2026-04-18 / V3-F03 完成最小 provider 契约 / 原因: `ToolProvider` / `SubAgentProvider` / `MCPProvider` 只持有 `CapabilityDescriptor` 并声明 `invoke(...)`；mock tool、真实 MCP transport 都留到后续 feature，避免 F03 越界
+- 2026-04-18 / `CapabilityRegistry.list(kind)` 兼容 `specialist -> sub_agent` 别名 / 原因: spec 文案与 `CapabilityKind.sub_agent` 枚举名不完全一致，先在 registry 层做兼容，避免后续调用方重复判断
+- 2026-04-18 / V3-F03 验证已固定在 `tests/v3/test_f03_registry.py` / 原因: 验收范围只包含 register/get/list、重复注册异常和 MCPProvider 接口兼容性；具体 MCP bridge 留给 F12
+- 2026-04-18 / V3-F04 采用 observe-only HookBus / 原因: 每个 handler 接收 `HookEvent` 深拷贝；如修改 event，只记 warning 且丢弃变更，避免 hook 成为隐藏编排层或改写主流程状态
+- 2026-04-18 / V3-F04 的 emit 结果固定为 `list[HookResult]` / 原因: 以注册顺序保留结构化观测结果；handler 异常或返回非法结果时只记 error 并返回 rejected result，不能拖垮主循环
+
+## 下一步建议
+
+- V3-F15 coding session 开工时:
+  - 先复用 F14 已落的 `POST /api/v3/sessions`、`POST /api/v3/sessions/{session_id}/messages`、`GET /api/v3/sessions/{session_id}/turns/{turn_number}/trace`，围绕 spec §12 的 A/B/C 三条参考对话写 smoke
+  - 同步落 `app/v3/observability/logging_config.py`，让 API / runtime / invocation / fallback 都输出带 `trace_id` 的 JSON 日志
+  - 验证入口固定为 `.\.venv\Scripts\python.exe -m pytest tests/v3/smoke tests/v3/test_f15_smoke.py -q`
+
+- **所有 /code 会话开工时（通用）**:
+  - 先运行 `.\.venv\Scripts\python.exe harness/v3/bootstrap.py`；如果失败，先修轨道，不要直接 coding
+  - 紧接着运行 `rg --files app/v3 tests/v3`，先核对当前真实工作区
+  - 每一轮 `/code` 都按 fresh coding-agent session 处理，只实现一个 feature
+  - 先读 feature 对应的 spec_reference 章节（docs/app_spec.md）
+  - 再读本 feature 的 scope / acceptance_criteria / implementation_notes（如有）
+  - 再按 `harness/v3/validation_matrix.json` 中该 feature 的 `validation_refs` 准备验证命令
+  - 所有验证统一使用 `.\.venv\Scripts\python.exe -m pytest ...`
+  - 如工作区、`feature_list.json`、`claude-progress.txt` 不一致，先按 state drift 处理，禁止继续实现 feature
+  - 然后再动代码；严禁脱离 spec 自由发挥
+
+- V3-F01 coding session 开工时:
+  - 先 `python -m venv .venv`（如缺失），再用 `.\.venv\Scripts\python.exe -m pip install -U pip`
+  - 再用 `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` 确认当前依赖 OK，再追加 pydantic-settings + httpx + pytest-asyncio
+  - app/v3/config/settings.py 的前缀用 ECOV3_（不是 ECOM_，和 V1 区分）
+  - app/main.py 改 app factory 时保留现有 `/health` 的返回结构（避免 test_v3_workspace.py 回归）
+  - 所有子目录的 __init__.py 初始化已完成，F01 只需填 settings 实现
+  - V3 的 tests 放 tests/v3/ 下（不和 tests/test_v3_workspace.py 冲突，后者保留作为 smoke 占位）
+
+- V3-F02 coding session 开工时:
+  - 先按 docs/app_spec.md §10 的核心类型逐个落 Pydantic 模型，不要一次性把 runtime 行为带进来
+  - Action discriminated union 先固定 `kind` 标签和 5 个 action 变体，再补 roundtrip/test fixtures
+  - 优先让 tests/v3/test_f02_models.py 成为类型语义的唯一验收口，避免模型文件各自漂移
+
+- V3-F03 coding session 开工时:
+  - 直接复用 F02 已落的 `CapabilityDescriptor` / `CapabilityKind` / `SpecialistBrief` / `SpecialistObservation`，不要再改字段名
+  - `app/v3/registry/providers.py` 先做抽象接口，不要顺手把 mock tool 或 specialist 实现带进来
+  - `CapabilityRegistry` 的确定性验收应只覆盖 register/get/list 和重复注册异常，MCP 具体调用留给 F12
+
+- V3-F04 coding session 开工时:
+  - `HookBus` 只做受控 pub-sub，不要让 handler 直接改写 `HookEvent`
+  - emit 顺序以注册顺序为准，异常 handler 只记日志并隔离，不能打断后续 handler
+  - 先把 `turn_start / decision / task / invocation / memory_write / fallback / turn_end` 七个点固定下来，后续 feature 直接复用
+
+- V3-F05 coding session 开工时:
+  - 直接复用 F04 的 `HookBus` 发 `HookPoint.memory_write`，不要另造通知通道
+  - `DurableMemory` 只接受 `source=user_confirmed`；`inferred` / `tool_fact` 至少在 V3.0 先拒绝写 durable
+  - `SessionMemory` 内部按 `session_id` 隔离，`get_view()` 返回只读快照，不要暴露可变底层 dict
+
+- V3-F07 coding session 开工时:
+  - 先按 `PermissionPolicy` → `HardeningGate` 的顺序实现，permission deny 也要写进 `TraceRecord.fallback_reason`
+  - Evidence rule 起步只做 `observation_id` 存在性校验，不做 claim 文本和 observation 内容的语义对齐
+  - Business boundary 先按白名单 topic 做硬拒绝，越界请求直接 fallback，不要先接 LLM
+
+- V3-F09 coding session 开工时:
+  - 直接复用 `app/v3/runtime/executor.py:SerialExecutor`，不要另起一套 loop / trace / task 管道
+  - Main Agent 只负责 observe / decide，tool 与 sub-agent 的具体执行继续走 F08 runtime
+  - LLM mock 路径优先打通：先让 JSON action 反序列化、非法 action fallback、loop_exhausted 三条路径可测，再接 OpenAI 兼容客户端
+
+- V3-F10 coding session 开工时:
+  - 继续复用 F03 `CapabilityRegistry` + F07 `PermissionPolicy`，specialist 不要私自绕过共享 capability / permission 路径
+  - `Specialist.execute()` 只产出 `SpecialistObservation`，不要直接生成最终用户 reply
+  - role -> specialist 的查找和固定角色集合放进团队协议，不要把动态 fork / persistent teammate 提前带进 V3.0
+
+- V3-F11 coding session 开工时:
+  - 先完成 `catalog_search` / `inventory_check` / `product_compare` 三个 `ToolProvider` 和 seed 数据，再考虑 specialist 如何消费它们；不要把 F13 的角色逻辑提前塞进 F11
+  - seed SKU 直接覆盖 spec §12 的 happy / clarification / low_stock 三类对话场景，给后续 F13 / F15 复用，避免后面反复补数
+
+- 2026-04-18 / V3-F11 完成:
+  - 产出: `app/v3/models/catalog.py`、`app/v3/tools/{seed_data,catalog_search,inventory_check,product_compare}.py`、`app/v3/tools/__init__.py`、`tests/v3/test_f11_tools.py`
+  - 决策: F11 把商品工具输入输出收敛为新的 Pydantic catalog models，并通过 `register_mock_tool_providers(...)` 统一注册到 `CapabilityRegistry`，后续 F12/F13 直接复用同一套工具描述与 mock 数据
+  - 决策: seed 目录固定为 15 个 `phone` + 15 个 `earphones`，显式覆盖 spec §12 happy path 提到的 `Sony WH-1000XM5` / `Bose QuietComfort Ultra Headphones` / `Sennheiser Momentum 4 Wireless` / `Apple AirPods Max`，并保留 Apple 跨品类结果与 low-stock SKU 供 clarification / inventory 场景复用
+  - 残余风险: `product_compare` 当前只覆盖 F13 计划中的核心维度（price / battery / noise_cancel / weight / warranty / brand）外加 phone 常用的 camera / charging，对更细粒度商品知识仍要等 F12 MCP/RAG 补充
+  - 验证: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f11_tools.py -q`
+  - 回归: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f02_models.py -q` and `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f03_registry.py -q`
+  - Next recommended step: start V3-F12 MCP 客户端 + Mock Server + RAG 风格工具；优先复用 F11 seed catalog 作为 mock knowledge base
+
+- V3-F12 coding session 开工时:
+  - 评估是否引入官方 `mcp` python SDK（加 requirements.txt）还是自写最小子集（仅 tools.list / tools.call）；倾向自写 < 200 LOC 以避免依赖膨胀
+  - Mock server 用 asyncio 同进程任务；transport 用 stdio 或内存管道，不起 HTTP port
+
+- 2026-04-18 / V3-F12 完成:
+  - 产出: `app/v3/tools/mcp_types.py`、`app/v3/tools/mcp_client.py`、`app/v3/tools/mcp_provider.py`、`app/v3/tools/mcp_mock_server/{__init__,knowledge_base,server}.py`、`tests/v3/test_f12_mcp.py`
+  - 决策: F12 不引入外部 `mcp` SDK，而是实现最小 MCP 子集，只覆盖 `tools.list` / `tools.call`，并保持 transport 可替换；当前默认走同进程 `InProcessMCPTransport`
+  - 决策: mock MCP server 直接复用 F11 seed catalog 生成 RAG 风格知识片段，`rag_product_knowledge` 返回 3-5 条结构化 snippet，供 specialist 像本地 tool 一样消费
+  - 决策: MCP 注册入口集中在 `register_mock_mcp_tool_providers(...)`，并受 `Settings.mcp_mock_enabled` 控制；关闭时不会向 `CapabilityRegistry` 注册任何 `mcp_tool`
+  - 残余风险: 当前 mock MCP 仅覆盖单工具、单方法族和 JSON content block；真实外部 server 的 discovery / transport / lifecycle 仍留给后续版本扩展
+  - 验证: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f12_mcp.py -q`
+  - 回归: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f03_registry.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f10_specialist_base.py -q` and `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f11_tools.py -q`
+  - Next recommended step: start V3-F13 4 个领域 Specialists；优先复用 F06 prompt layering、F11 本地工具和 F12 `rag_product_knowledge`，把 role prompt、allowed_capabilities 和 evidence 引用一次串起来
+
+- 2026-04-18 / V3-F15 完成:
+  - 产出: `app/v3/observability/{__init__,logging_config}.py`、`app/v3/api/{__init__,sessions,messages,trace,middleware}.py`、`app/v3/runtime/executor.py`、`tests/v3/smoke/{__init__,helpers,scenario_a_happy,scenario_b_clarification,scenario_c_fallback,test_scenarios}.py`、`tests/v3/test_f15_smoke.py`
+  - 决策: observability 统一挂在 `app.v3` logger 下，使用 JSON formatter + per-app in-memory capture；默认只保留内存捕获，`app_debug=true` 时才额外挂到 stderr，避免测试噪音
+  - 决策: HookBus 通过 per-point logging handler 产出 `hook.emit` 结构化日志；runtime 显式记录 `turn.started` / `turn.finished` / `invocation.started` / `invocation.succeeded` / `turn.fallback`
+  - 决策: smoke 源文件按 spec 命名保留在 `tests/v3/smoke/scenario_*.py`，并补 `tests/v3/smoke/test_scenarios.py` 作为 pytest 目录收集入口，保证 `pytest tests/v3/smoke` 可直接发现 3 个场景
+  - 残余风险: happy-path smoke 为保持 determinism 只覆盖 `catalog_search -> reply` 的推荐闭环，没有把 F13 specialist 串进端到端路径；trace / logging contract 已覆盖，领域编排深度仍主要由 F13/F14 单测保证
+  - 残余风险: 沙箱仍会对 `.pytest_cache/` 给出写权限告警，但不影响 pytest exit code 或 F15 验收
+  - 验证: `.\.venv\Scripts\python.exe -m pytest tests/v3/smoke/scenario_a_happy.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/smoke/scenario_b_clarification.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/smoke/scenario_c_fallback.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f15_smoke.py -q`
+  - 回归: `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f14_api.py -q` and `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f09_main_agent.py -q`
+  - 验证矩阵: `.\.venv\Scripts\python.exe -m pytest tests/v3/smoke tests/v3/test_f15_smoke.py -q`
+  - Next recommended step: V3 feature backlog 已清空；建议运行 bootstrap track checks，并进入整体验收 / 发布前整理
+
+## 未解决的问题
+
+- MemoryWriteDecision 的分类精度: 目前只识别 source=user_confirmed 的显式标记，inferred 全拒。未来 source 可能细分（user_confirmed / user_implied / agent_inferred / tool_fact），分类规则需要回到 spec §6.3 再确认
+- Evidence rule 的粒度: 当前只要求 reply 里的 claim map 到 observation_id，不做语义级校验。何时升级到"claim 文本 ↔ observation 内容"一致性校验需要等 F09 完成后评估
+- Skill / Plugin 启用时机: V3.0 保留 stub type 但不做运行时；是否提前到 V3.0 某个 feature 实现 SkillDefinition 的基本注册，待 F12 做完看是否自然需要
+- pytest 缓存目录告警: 当前沙箱对 `.pytest_cache/` 写入有权限限制，但不影响 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f02_models.py -q` 通过；如后续需要消除告警，再单独处理测试缓存目录权限
+
+## 历史会话记录
+
+- 2026-04-18 / Initializer step (本文件创建) / 产出: harness/v3/feature_list.json + CLAUDE.md 重写 + app/v3/ 空骨架
+- 2026-04-18 / V3-F01 完成 / 产出: app factory、ECOV3_ Settings、tests/v3/test_f01_skeleton.py
+- 2026-04-18 / V3-F02 完成 / 产出: app/v3/models/*.py 类型库、Action discriminated union、tests/v3/test_f02_models.py（56 passed）
+- 2026-04-18 / V3-F03 完成 / 产出: registry/provider 抽象、重复注册保护、tests/v3/test_f03_registry.py（4 passed）
+- 2026-04-18 / V3-F04 完成 / 产出: observe-only `HookBus`、hook 导出、tests/v3/test_f04_hooks.py（3 passed）；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f04_hooks.py -q`
+- 2026-04-18 / V3-F05 完成 / 产出: `SessionMemory`、`DurableMemory`、shared `memory_write` hook payload helper、`tests/v3/test_f05_memory.py`；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f05_memory.py -q` and `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f02_models.py -q`
+- 2026-04-18 / V3-F06 完成 / 产出: `app/v3/prompts/registry.py`、`app/v3/prompts/__init__.py`、`tests/v3/test_f06_prompts.py`；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f06_prompts.py -q`
+- 2026-04-18 / V3-F08 完成 / 产出: `app/v3/runtime/task_board.py`、`app/v3/runtime/context_packet.py`、`app/v3/runtime/trace_store.py`、`app/v3/runtime/executor.py`、`tests/v3/test_f08_runtime.py`、`tests/v3/fixtures/context_packet_golden.json`；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f08_runtime.py -q` and `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f02_models.py -q`
+- 2026-04-18 / V3-F09 完成 / 产出: `app/v3/agents/llm_client.py`、`app/v3/agents/main_agent.py`、`tests/v3/test_f09_main_agent.py`；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f09_main_agent.py -q`
+- 2026-04-18 / V3-F11 完成 / 产出: `app/v3/models/catalog.py`、`app/v3/tools/{seed_data,catalog_search,inventory_check,product_compare}.py`、`app/v3/tools/__init__.py`、`tests/v3/test_f11_tools.py`；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f11_tools.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f02_models.py -q` and `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f03_registry.py -q`
+- 2026-04-18 / V3-F12 完成 / 产出: `app/v3/tools/mcp_types.py`、`app/v3/tools/mcp_client.py`、`app/v3/tools/mcp_provider.py`、`app/v3/tools/mcp_mock_server/{__init__,knowledge_base,server}.py`、`tests/v3/test_f12_mcp.py`；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f12_mcp.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f03_registry.py -q`、`.\.venv\Scripts\python.exe -m pytest tests/v3/test_f10_specialist_base.py -q` and `.\.venv\Scripts\python.exe -m pytest tests/v3/test_f11_tools.py -q`
+- 2026-04-18 / V3-F15 完成 / 产出: `app/v3/observability/{__init__,logging_config}.py`、`tests/v3/smoke/*`、`tests/v3/test_f15_smoke.py`；验证命令 `.\.venv\Scripts\python.exe -m pytest tests/v3/smoke tests/v3/test_f15_smoke.py -q`

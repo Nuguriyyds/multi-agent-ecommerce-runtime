@@ -1,0 +1,300 @@
+{
+  "track": "harness/v2",
+  "entries": [
+    {
+      "id": "TRACK-FILES",
+      "scope": "track",
+      "commands": [
+        "python harness/v2/bootstrap.py --check-track"
+      ],
+      "success_condition": "bootstrap exits 0 and confirms all required V2 track files plus source-spec references are valid",
+      "artifacts": [
+        "harness/v2/app_spec.md",
+        "harness/v2/feature_list.json",
+        "harness/v2/claude-progress.txt",
+        "harness/v2/validation_matrix.json",
+        "harness/v2/initializer_report.md",
+        "harness/v2/README.md"
+      ]
+    },
+    {
+      "id": "TRACK-COMMAND-DOCS",
+      "scope": "track",
+      "commands": [
+        "python harness/v2/bootstrap.py --check-commands"
+      ],
+      "success_condition": "bootstrap exits 0 and confirms code-v2 command/skill docs point only at harness/v2 state files",
+      "artifacts": [
+        ".claude/commands/code-v2.md",
+        ".codex/skills/code-v2/SKILL.md",
+        ".codex/skills/code-v2/agents/openai.yaml"
+      ]
+    },
+    {
+      "id": "V2-F01-BOOTSTRAP",
+      "scope": "feature",
+      "commands": [
+        "python harness/v2/bootstrap.py",
+        "pytest tests/test_v2_harness_bootstrap.py -q"
+      ],
+      "success_condition": "bootstrap reports the V2 track healthy and the deterministic harness bootstrap test passes",
+      "artifacts": [
+        "harness/v2/bootstrap.py",
+        "tests/test_v2_harness_bootstrap.py"
+      ]
+    },
+    {
+      "id": "V2-F02-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_runtime_registry.py -q"
+      ],
+      "success_condition": "runtime registry and shared type tests pass",
+      "artifacts": [
+        "tests/test_v2_runtime_registry.py"
+      ]
+    },
+    {
+      "id": "V2-F02-STRUCTURE",
+      "scope": "feature",
+      "commands": [
+        "python harness/v2/bootstrap.py --check-track"
+      ],
+      "success_condition": "track remains consistent after runtime skeleton changes",
+      "artifacts": [
+        "harness/v2/feature_list.json"
+      ]
+    },
+    {
+      "id": "V2-F03-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_persistence.py -q"
+      ],
+      "success_condition": "persistence repositories and migration/init tests pass",
+      "artifacts": [
+        "tests/test_v2_persistence.py"
+      ]
+    },
+    {
+      "id": "V2-F03-SCHEMA",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_persistence.py -k schema -q"
+      ],
+      "success_condition": "database schema tests for all V2 tables pass",
+      "artifacts": [
+        "tests/test_v2_persistence.py"
+      ]
+    },
+    {
+      "id": "V2-F04-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_policy_hook_prompt.py -q"
+      ],
+      "success_condition": "policy, hook, and prompt registry tests pass",
+      "artifacts": [
+        "tests/test_v2_policy_hook_prompt.py"
+      ]
+    },
+    {
+      "id": "V2-F04-POLICY",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_policy_hook_prompt.py -k policy -q"
+      ],
+      "success_condition": "allow/reject/clarify policy gate behavior is verified",
+      "artifacts": [
+        "tests/test_v2_policy_hook_prompt.py"
+      ]
+    },
+    {
+      "id": "V2-F05-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_session_api.py -q"
+      ],
+      "success_condition": "session creation and message loop tests pass",
+      "artifacts": [
+        "tests/test_v2_session_api.py"
+      ]
+    },
+    {
+      "id": "V2-F05-API",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_session_api.py -k api -q"
+      ],
+      "success_condition": "/api/v2/sessions and /messages wire shape matches the app spec",
+      "artifacts": [
+        "tests/test_v2_session_api.py"
+      ]
+    },
+    {
+      "id": "V2-F06-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_preference_memory.py -q"
+      ],
+      "success_condition": "preference extraction, session memory, and writeback tests pass",
+      "artifacts": [
+        "tests/test_v2_preference_memory.py"
+      ]
+    },
+    {
+      "id": "V2-F06-WRITEBACK",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_preference_memory.py -k writeback -q"
+      ],
+      "success_condition": "stable-preference writeback and refresh-event emission are verified",
+      "artifacts": [
+        "tests/test_v2_preference_memory.py"
+      ]
+    },
+    {
+      "id": "V2-F07-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_scene_workers.py -q"
+      ],
+      "success_condition": "catalog/inventory worker tests and scene rules pass",
+      "artifacts": [
+        "tests/test_v2_scene_workers.py"
+      ]
+    },
+    {
+      "id": "V2-F07-SCENE",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_scene_workers.py -k scene -q"
+      ],
+      "success_condition": "default/homepage/product_page/cart context policy is verified",
+      "artifacts": [
+        "tests/test_v2_scene_workers.py"
+      ]
+    },
+    {
+      "id": "V2-F08-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_comparison_copy.py -q"
+      ],
+      "success_condition": "comparison and copy worker tests pass",
+      "artifacts": [
+        "tests/test_v2_comparison_copy.py"
+      ]
+    },
+    {
+      "id": "V2-F08-COPY",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_comparison_copy.py -k copy -q"
+      ],
+      "success_condition": "copy worker uses PromptRegistry-backed generation correctly",
+      "artifacts": [
+        "tests/test_v2_comparison_copy.py"
+      ]
+    },
+    {
+      "id": "V2-F09-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_background_refresh.py -q"
+      ],
+      "success_condition": "background refresh processor tests pass",
+      "artifacts": [
+        "tests/test_v2_background_refresh.py"
+      ]
+    },
+    {
+      "id": "V2-F09-EVENTS",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_background_refresh.py -k event -q"
+      ],
+      "success_condition": "event retry/failure semantics are verified",
+      "artifacts": [
+        "tests/test_v2_background_refresh.py"
+      ]
+    },
+    {
+      "id": "V2-F10-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_recommendation_api.py -q"
+      ],
+      "success_condition": "recommendation read API tests pass",
+      "artifacts": [
+        "tests/test_v2_recommendation_api.py"
+      ]
+    },
+    {
+      "id": "V2-F10-API",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_recommendation_api.py -k scene -q"
+      ],
+      "success_condition": "scene-aware recommendation read behavior is verified",
+      "artifacts": [
+        "tests/test_v2_recommendation_api.py"
+      ]
+    },
+    {
+      "id": "V2-F11-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_feedback_api.py -q"
+      ],
+      "success_condition": "feedback ingress tests pass",
+      "artifacts": [
+        "tests/test_v2_feedback_api.py"
+      ]
+    },
+    {
+      "id": "V2-F11-FEEDBACK",
+      "scope": "feature",
+      "commands": [
+        "pytest tests/test_v2_feedback_api.py -k no_learning -q"
+      ],
+      "success_condition": "feedback ingress is persisted without triggering learning or refresh",
+      "artifacts": [
+        "tests/test_v2_feedback_api.py"
+      ]
+    },
+    {
+      "id": "V2-F12-PYTEST",
+      "scope": "feature",
+      "commands": [
+        "pytest tests -k \"test_v2_\" -q"
+      ],
+      "success_condition": "the V2 test suite passes as a deterministic validation gate",
+      "artifacts": [
+        "tests/test_v2_*"
+      ]
+    },
+    {
+      "id": "GLOBAL-V2-SMOKE",
+      "scope": "global",
+      "commands": [
+        "python smoke_test_v2.py"
+      ],
+      "success_condition": "the V2 smoke script completes successfully against seeded or mocked data",
+      "artifacts": [
+        "smoke_test_v2.py"
+      ]
+    },
+    {
+      "id": "GLOBAL-V1-NONREGRESSION",
+      "scope": "global",
+      "commands": [
+        "pytest tests -q"
+      ],
+      "success_condition": "existing V1 regression suite still passes after V2 additions",
+      "artifacts": [
+        "tests/"
+      ]
+    }
+  ]
+}

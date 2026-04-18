@@ -1,0 +1,72 @@
+{
+  "label": "local-v1",
+  "mode": "v1",
+  "k6": {
+    "available": true,
+    "http_reqs": {
+      "count": 5630.0,
+      "rate": 187.50478878238312
+    },
+    "http_req_failed": {
+      "rate": 0.0
+    },
+    "http_req_duration_ms": {
+      "avg": 53.147230852574985,
+      "p50": 49.7004,
+      "p95": 70.5057,
+      "p99": 92.174087,
+      "max": 127.6914
+    },
+    "iterations": {
+      "count": 5630.0,
+      "rate": 187.50478878238312
+    },
+    "endpoint_metrics": {},
+    "custom_metrics": {
+      "v1": {
+        "agent_latency_ms": {
+          "product_rec_coarse": {
+            "avg": 0.47962344582593286,
+            "p50": 0.44,
+            "p95": 0.66,
+            "p99": 0.8671000000000003
+          },
+          "inventory": {
+            "avg": 0.643243339253998,
+            "p50": 0.59,
+            "p95": 0.9,
+            "p99": 1.3071000000000004
+          },
+          "product_rec_ranked": {
+            "avg": 0.4636074600355257,
+            "p50": 0.44,
+            "p95": 0.67,
+            "p99": 0.9
+          },
+          "marketing_copy": {
+            "avg": 0.5531190053285984,
+            "p50": 0.53,
+            "p95": 0.7655000000000018,
+            "p99": 0.9971000000000003
+          },
+          "user_profile": {
+            "avg": 0.3502966252220185,
+            "p50": 0.34,
+            "p95": 0.5,
+            "p99": 0.6471000000000003
+          }
+        },
+        "agent_degraded_ratio": {
+          "user_profile": 0.0,
+          "product_rec_ranked": 0.0,
+          "product_rec_coarse": 0.0,
+          "inventory": 0.0,
+          "marketing_copy": 0.0
+        }
+      }
+    }
+  },
+  "v2_runtime": {
+    "available": false
+  }
+}
