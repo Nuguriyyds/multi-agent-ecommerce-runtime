@@ -290,6 +290,8 @@ class LLMClient:
     @staticmethod
     def _sanitize_decision_mapping(payload: Mapping[str, Any]) -> dict[str, Any]:
         action = payload.get("action")
+        if isinstance(action, str):
+            action = {"kind": action}
         if not isinstance(action, Mapping):
             raise ValueError("decision action must be an object")
 

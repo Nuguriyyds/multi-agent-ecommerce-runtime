@@ -244,3 +244,21 @@ def test_agent_decision_accepts_routing_metadata() -> None:
     )
 
     assert decision.routing_metadata == {"route_result": "allow"}
+
+
+def test_router_asks_only_for_scene_when_budget_and_category_are_known() -> None:
+    session = SessionState(
+        session_id="session-scene-only",
+        session_working_memory={"active_constraints": {"category": "earphones", "budget_max": 3000}},
+        durable_user_memory={"budget": {"max": 3000}},
+    )
+
+    route = CollaborationRouter().route(
+        make_context("帮我看看 3000 左右的降噪耳机", session=session, observations=[])
+    )
+
+    assert route.required_action_kind == "ask_clarification"
+    assert route.rewrite_action is not None
+    assert route.rewrite_action.kind == "ask_clarification"
+    assert route.rewrite_action.missing_slots == ["scene"]
+    assert "场景" in route.rewrite_action.question

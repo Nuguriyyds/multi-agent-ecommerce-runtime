@@ -70,12 +70,17 @@ class CollaborationRouter:
             return self._reply_route("observations_ready", "existing observations are enough for a grounded reply", context)
 
         if self._budget_missing(context) and self._is_shopping_request(normalized):
-            return self._clarification_route("missing_constraints", "shopping request is missing required constraints")
+            return self._clarification_route(
+                "missing_constraints",
+                "shopping request is missing required constraints",
+                missing_slots=["budget", "category", "scene"],
+            )
 
         if self._scene_missing(context) and self._needs_scene_clarification(normalized):
             return self._clarification_route(
                 "missing_scene",
                 "exploratory shopping request is missing the primary usage scene",
+                missing_slots=["scene"],
             )
 
         if self._is_shopping_request(normalized):
@@ -85,7 +90,11 @@ class CollaborationRouter:
                 _catalog_search_action(message),
             )
 
-        return self._clarification_route("ambiguous_request", "request is not specific enough for tool or specialist use")
+        return self._clarification_route(
+            "ambiguous_request",
+            "request is not specific enough for tool or specialist use",
+            missing_slots=["budget", "category", "scene"],
+        )
 
     def _route_v31_lite(self, context: TurnRuntimeContext) -> CollaborationRoute:
         sources = self._sources(context)
@@ -195,14 +204,19 @@ class CollaborationRouter:
         )
 
     @staticmethod
-    def _clarification_route(route_key: str, reason: str) -> CollaborationRoute:
+    def _clarification_route(
+        route_key: str,
+        reason: str,
+        *,
+        missing_slots: list[str],
+    ) -> CollaborationRoute:
         return CollaborationRoute(
             route_key=route_key,
             required_action_kind="ask_clarification",
             reason=reason,
             rewrite_action=AskClarificationAction(
-                question="为了继续推荐，我需要先确认预算、品类和使用场景。你希望控制在多少预算内，主要用在什么场景？",
-                missing_slots=["budget", "category", "scene"],
+                question=_clarification_question(missing_slots),
+                missing_slots=missing_slots,
             ),
         )
 
@@ -231,6 +245,7 @@ class CollaborationRouter:
             return CollaborationRouter._clarification_route(
                 "reply_without_evidence_guard",
                 "reply requires at least one observation",
+                missing_slots=["budget", "category", "scene"],
             )
         return CollaborationRoute(
             route_key=route_key,
@@ -245,6 +260,29 @@ class CollaborationRouter:
 
 def _contains_any(text: str, needles: tuple[str, ...]) -> bool:
     return any(needle.lower() in text for needle in needles)
+
+
+def _clarification_question(missing_slots: list[str]) -> str:
+    normalized_slots = [slot for slot in missing_slots if slot in {"budget", "category", "scene"}]
+    unique_slots: list[str] = []
+    for slot in normalized_slots:
+        if slot not in unique_slots:
+            unique_slots.append(slot)
+
+    if unique_slots == ["scene"]:
+        return "为了继续推荐，我还需要知道你的主要使用场景，比如通勤、办公室、运动或旅行。"
+    if unique_slots == ["budget"]:
+        return "为了继续推荐，我还需要确认你的预算范围。"
+    if unique_slots == ["category"]:
+        return "为了继续推荐，我还需要确认你想买的具体品类。"
+
+    prompts = {
+        "budget": "预算范围",
+        "category": "具体品类",
+        "scene": "主要使用场景",
+    }
+    joined = "、".join(prompts[slot] for slot in unique_slots) if unique_slots else "预算、品类和使用场景"
+    return f"为了继续推荐，我还需要确认你的{joined}。"
 
 
 def _catalog_search_action(message: str) -> CallToolAction:

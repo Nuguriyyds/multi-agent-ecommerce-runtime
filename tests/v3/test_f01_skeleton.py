@@ -33,6 +33,7 @@ def test_settings_defaults(monkeypatch) -> None:
     assert settings.openai_api_key == ""
     assert settings.openai_base_url == "https://api.openai.com/v1"
     assert settings.openai_model == "gpt-4.1-mini"
+    assert settings.openai_timeout_seconds == 30.0
     assert settings.app_host == "127.0.0.1"
     assert settings.app_port == 8000
     assert settings.app_debug is False
@@ -48,6 +49,7 @@ def test_settings_read_ecov3_prefix_and_cache(monkeypatch) -> None:
     monkeypatch.setenv("ECOV3_OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("ECOV3_OPENAI_BASE_URL", "https://example.com/v1")
     monkeypatch.setenv("ECOV3_OPENAI_MODEL", "gpt-test")
+    monkeypatch.setenv("ECOV3_OPENAI_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("ECOV3_APP_HOST", "0.0.0.0")
     monkeypatch.setenv("ECOV3_APP_PORT", "9001")
     monkeypatch.setenv("ECOV3_APP_DEBUG", "true")
@@ -63,6 +65,7 @@ def test_settings_read_ecov3_prefix_and_cache(monkeypatch) -> None:
     assert first.openai_api_key == "test-key"
     assert first.openai_base_url == "https://example.com/v1"
     assert first.openai_model == "gpt-test"
+    assert first.openai_timeout_seconds == 45
     assert first.app_host == "0.0.0.0"
     assert first.app_port == 9001
     assert first.app_debug is True

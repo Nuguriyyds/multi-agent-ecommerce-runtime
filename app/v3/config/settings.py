@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="")
     openai_base_url: str = Field(default="https://api.openai.com/v1")
     openai_model: str = Field(default="gpt-4.1-mini")
+    openai_timeout_seconds: float = Field(default=30.0, gt=0)
     app_host: str = Field(default="127.0.0.1")
     app_port: int = Field(default=8000, ge=1, le=65535)
     app_debug: bool = Field(default=False)

@@ -63,6 +63,7 @@ _DEFAULT_PROMPTS: tuple[tuple[PromptLayer, str, str, str], ...] = (
         (
             "Output one AgentDecision JSON object with fields: action, rationale, "
             "next_task_label, continue_loop. "
+            "The action field must be an object with a kind field, never a bare string. "
             "For reply_to_user include observation_ids. "
             "For call_tool include capability_name and arguments."
         ),
@@ -91,6 +92,7 @@ class MainAgent:
             api_key=self._settings.openai_api_key,
             base_url=self._settings.openai_base_url,
             model=self._settings.openai_model,
+            timeout=self._settings.openai_timeout_seconds,
         )
         self._logger = logging.getLogger(__name__)
         self._collaboration_router = collaboration_router or CollaborationRouter()
@@ -146,9 +148,18 @@ class MainAgent:
                 prompt=prompt,
                 context=context,
             )
-            decision = AgentDecision.model_validate_json(
-                self._llm_client.normalize_decision_payload(raw_output)
-            )
+            normalized_output = self._llm_client.normalize_decision_payload(raw_output)
+            try:
+                decision = AgentDecision.model_validate_json(normalized_output)
+            except ValidationError as exc:
+                recovered = self._recover_incomplete_decision(
+                    normalized_output=normalized_output,
+                    route=route,
+                    error=exc,
+                )
+                if recovered is None:
+                    raise
+                decision = recovered
         except LLMClientError as exc:
             self._logger.warning("MainAgent decision degraded due to LLM transport/mock failure: %s", exc)
             decision = self._fallback_decision(
@@ -225,11 +236,14 @@ class MainAgent:
             return decision
 
         if actual_kind == route.required_action_kind:
+            route_result = "rewrite" if decision.routing_metadata.get("llm_partial_recovered") else "allow"
             decision.routing_metadata = {
                 **decision.routing_metadata,
                 **metadata,
-                "route_result": "allow",
+                "route_result": route_result,
             }
+            if route_result == "rewrite":
+                decision.routing_metadata["rewritten_action_kind"] = decision.action.kind
             return decision
 
         if route.rewrite_action is None:
@@ -304,6 +318,60 @@ class MainAgent:
         if len(normalized) > 400:
             return f"{normalized[:400]}..."
         return normalized
+
+    def _recover_incomplete_decision(
+        self,
+        *,
+        normalized_output: str,
+        route: CollaborationRoute,
+        error: ValidationError,
+    ) -> AgentDecision | None:
+        if route.rewrite_action is None:
+            return None
+
+        try:
+            payload = json.loads(normalized_output)
+        except ValueError:
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        action = payload.get("action")
+        if not isinstance(action, dict):
+            return None
+
+        action_kind = action.get("kind")
+        if not isinstance(action_kind, str):
+            return None
+        if action_kind != route.required_action_kind:
+            return None
+
+        rationale = payload.get("rationale")
+        if not isinstance(rationale, str):
+            rationale = f"Recovered from incomplete LLM action: {action_kind}"
+
+        self._logger.info(
+            "MainAgent recovered incomplete LLM action route=%s llm_action=%s required_action=%s",
+            route.route_key,
+            action_kind,
+            route.required_action_kind,
+        )
+        return AgentDecision(
+            action=route.rewrite_action,
+            rationale=(
+                "route_policy_rewrite: "
+                f"recovered_incomplete_action={action_kind}, required_action={route.required_action_kind}. "
+                f"{route.reason} Original rationale: {rationale}"
+            ),
+            next_task_label=f"route_{route.route_key}",
+            continue_loop=route.rewrite_action.kind in {"call_tool", "call_sub_agent"},
+            routing_metadata={
+                "llm_partial_recovered": True,
+                "llm_partial_action_kind": action_kind,
+                "llm_partial_error": str(error),
+            },
+        )
 
 
 __all__ = ["MainAgent"]

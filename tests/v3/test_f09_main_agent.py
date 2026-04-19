@@ -336,3 +336,57 @@ async def test_main_agent_accepts_remote_payload_wrapped_in_decision_object() ->
     assert decision.action.kind == "reply_to_user"
     assert decision.routing_metadata["route_result"] == "allow"
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_main_agent_recovers_when_remote_action_is_a_bare_string() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json_payload
+                        }
+                    }
+                ]
+            },
+        )
+
+    json_payload = """{
+  "action": "ask_clarification",
+  "rationale": "The user has budget and category, but the primary usage scene is missing.",
+  "next_task_label": "clarify_scene",
+  "continue_loop": false
+}"""
+
+    client = AsyncClient(transport=httpx.MockTransport(handler), base_url="https://example.test")
+    llm_client = LLMClient(
+        api_key="demo-key",
+        base_url="https://example.test",
+        model="demo-model",
+        http_client=client,
+    )
+    agent = MainAgent(llm_client=llm_client)
+    context = make_decide_context(
+        session_id="session-remote-bare-action",
+        latest_user_message="帮我看看 3000 左右的降噪耳机",
+        observations=[],
+    )
+    context.loop_state.observations = []
+    context.loop_state.current_node = "need_expression"
+
+    decision = await agent.decide(context)
+
+    assert decision.action.kind == "ask_clarification"
+    assert decision.routing_metadata["route_result"] == "rewrite"
+    assert decision.routing_metadata["required_action_kind"] == "ask_clarification"
+    assert decision.routing_metadata["llm_partial_recovered"] is True
+    await client.aclose()
+
+
+def test_main_agent_uses_settings_timeout_for_remote_llm() -> None:
+    agent = MainAgent(settings=Settings(openai_api_key="demo-key", openai_timeout_seconds=42))
+
+    assert agent.llm_client._http_client.timeout.connect == 42
