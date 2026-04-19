@@ -64,6 +64,7 @@ class AgentDecision(V3Model):
     rationale: str
     next_task_label: str | None = None
     continue_loop: bool = False
+    routing_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class HardeningGateResult(V3Model):

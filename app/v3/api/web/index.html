@@ -383,6 +383,89 @@
     border-radius: 4px;
     border: 1px solid #bbf7d0;
   }
+  .pick-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .pick-actions button {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    border-radius: 8px;
+    padding: 5px 9px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .pick-actions button:hover:not(:disabled) {
+    border-color: #0969da;
+    color: #0969da;
+  }
+  .pick-actions button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .metric-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px;
+  }
+  .metric-card .metric-label {
+    font-size: 11px;
+    color: #6b7280;
+    margin-bottom: 5px;
+  }
+  .metric-card .metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .metric-section {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .metric-section h3 {
+    font-size: 12px;
+    margin: 0 0 8px;
+    color: #374151;
+  }
+  .metric-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .metric-line:last-child { border-bottom: none; }
+  .metric-key { color: #6b7280; }
+  .metric-val {
+    color: #111827;
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+  }
+  .capability-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .capability-pill {
+    font-size: 11px;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: #f8fafc;
+    color: #334155;
+  }
 
   .turn-card {
     background: #ffffff;
@@ -481,6 +564,7 @@
         为你推荐<span class="count-badge" id="pickCount">0</span>
       </button>
       <button class="tab-button" data-tab="trace">Trace</button>
+      <button class="tab-button" data-tab="observability">观测数据</button>
     </div>
     <div class="tab-content" id="tab-preferences">
       <div class="hint">
@@ -502,6 +586,12 @@
       </div>
       <div id="traceArea"></div>
     </div>
+    <div class="tab-content hidden" id="tab-observability">
+      <div class="hint">
+        指标来自内置 MCP 工具 <code>observability_metrics_query</code>。运行时数据由 Trace 计算,推荐反馈只进入会话级指标,不写长期记忆。
+      </div>
+      <div id="observabilityArea"></div>
+    </div>
   </aside>
 </main>
 <footer>
@@ -518,6 +608,7 @@ const sessionChip = document.getElementById('sessionChip');
 const demoStatus = document.getElementById('demoStatus');
 const prefListEl = document.getElementById('prefList');
 const pickListEl = document.getElementById('pickList');
+const observabilityEl = document.getElementById('observabilityArea');
 const prefCountEl = document.getElementById('prefCount');
 const pickCountEl = document.getElementById('pickCount');
 
@@ -552,7 +643,7 @@ async function initSession() {
       '你好!我是 V3 Main Agent。对话中说的预算 / 场景 / 品类 / 排斥品牌会实时写入右侧"我的偏好"档案,"为你推荐"会基于档案挑 3 款匹配的。所有 memory 写入进 trace,可逐条撤销。',
       'reply'
     );
-    await refreshPreferencesAndPicks();
+    await refreshPanels();
   } catch (e) {
     sessionChip.textContent = '连接失败';
     appendSystemMessage(`Session 创建失败: ${e.message}`);
@@ -613,7 +704,7 @@ async function sendMessage(text) {
     turnCount = result.turn_number;
     appendAssistantMessage(result.message, result.status);
     await loadTrace(turnCount);
-    await refreshPreferencesAndPicks();
+    await refreshPanels();
   } catch (e) {
     appendSystemMessage(`请求失败: ${e.message}`);
   } finally {
@@ -714,9 +805,9 @@ function prependTraceCard(turn, trace) {
   traceEl.insertBefore(card, traceEl.firstChild);
 }
 
-async function refreshPreferencesAndPicks() {
+async function refreshPanels() {
   if (!sessionId) return;
-  await Promise.all([loadPreferences(), loadPicks()]);
+  await Promise.all([loadPreferences(), loadPicks(), loadObservability()]);
 }
 
 async function loadPreferences() {
@@ -788,7 +879,7 @@ async function revokePreference(key, buttonEl) {
       const err = await resp.text();
       throw new Error(`HTTP ${resp.status}: ${err}`);
     }
-    await refreshPreferencesAndPicks();
+    await refreshPanels();
   } catch (e) {
     appendSystemMessage(`撤销 "${key}" 失败: ${e.message}`);
     buttonEl.disabled = false;
@@ -822,7 +913,101 @@ function renderPicks(picks, hint) {
       <div class="pick-meta">${escapeHtml(pick.brand)} · ${escapeHtml(pick.category)} · 评分 ${escapeHtml(String(pick.rating))}</div>
       <div class="pick-desc">${escapeHtml(pick.description || '')}</div>
       <div class="pick-reason">💡 ${escapeHtml(pick.match_reason)}</div>
+      <div class="pick-actions">
+        <button data-feedback="interested" data-sku="${escapeHtml(pick.sku)}">感兴趣</button>
+        <button data-feedback="not_interested" data-sku="${escapeHtml(pick.sku)}">不感兴趣</button>
+      </div>
     </div>`).join('');
+  pickListEl.querySelectorAll('[data-feedback]').forEach(button => {
+    button.addEventListener('click', () => sendRecommendationFeedback(button.dataset.sku, button.dataset.feedback, button));
+  });
+}
+
+async function sendRecommendationFeedback(sku, signal, buttonEl) {
+  if (!sessionId || !sku || !signal) return;
+  buttonEl.disabled = true;
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions/${sessionId}/recommendation_feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku, signal, source: 'ui' })
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${err}`);
+    }
+    await loadObservability();
+  } catch (e) {
+    appendSystemMessage(`记录推荐反馈失败: ${e.message}`);
+  } finally {
+    buttonEl.disabled = false;
+  }
+}
+
+async function loadObservability() {
+  if (!sessionId) return;
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions/${sessionId}/observability`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderObservability(data);
+  } catch (e) {
+    console.error('loadObservability failed', e);
+  }
+}
+
+function renderObservability(data) {
+  const runtime = data.runtime || {};
+  const feedback = data.feedback || {};
+  const capabilityCounts = runtime.capability_counts || {};
+  const recentTurns = data.recent_turns || [];
+  const capabilityHtml = Object.keys(capabilityCounts).length
+    ? Object.entries(capabilityCounts).map(([name, count]) =>
+        `<span class="capability-pill">${escapeHtml(name)} × ${escapeHtml(String(count))}</span>`
+      ).join('')
+    : '<span class="metric-key">暂无能力调用</span>';
+  const recentTurnHtml = recentTurns.length
+    ? recentTurns.map(turn => `
+      <div class="metric-line">
+        <span class="metric-key">Turn ${escapeHtml(String(turn.turn_number))} · ${escapeHtml(turn.status || 'unknown')}</span>
+        <span class="metric-val">${escapeHtml(String(turn.invocation_count))} 调用 / ${escapeHtml(String(turn.latency_ms))}ms</span>
+      </div>`
+    ).join('')
+    : '<div class="metric-line"><span class="metric-key">暂无 turn 数据</span><span class="metric-val">—</span></div>';
+
+  observabilityEl.innerHTML = `
+    <div class="metric-grid">
+      <div class="metric-card"><div class="metric-label">Turn 数</div><div class="metric-value">${escapeHtml(String(runtime.turn_count || 0))}</div></div>
+      <div class="metric-card"><div class="metric-label">平均耗时</div><div class="metric-value">${escapeHtml(String(runtime.avg_turn_latency_ms || 0))}ms</div></div>
+      <div class="metric-card"><div class="metric-label">能力调用</div><div class="metric-value">${escapeHtml(String(runtime.total_invocations || 0))}</div></div>
+      <div class="metric-card"><div class="metric-label">兴趣率</div><div class="metric-value">${formatRate(feedback.interest_rate)}</div></div>
+    </div>
+    <div class="metric-section">
+      <h3>运行时指标</h3>
+      <div class="metric-line"><span class="metric-key">决策数</span><span class="metric-val">${escapeHtml(String(runtime.total_decisions || 0))}</span></div>
+      <div class="metric-line"><span class="metric-key">观测数</span><span class="metric-val">${escapeHtml(String(runtime.total_observations || 0))}</span></div>
+      <div class="metric-line"><span class="metric-key">Fallback 数</span><span class="metric-val">${escapeHtml(String(runtime.fallback_count || 0))}</span></div>
+      <div class="metric-line"><span class="metric-key">Guardrail 命中</span><span class="metric-val">${escapeHtml(String(runtime.guardrail_hit_count || 0))}</span></div>
+    </div>
+    <div class="metric-section">
+      <h3>能力调用分布</h3>
+      <div class="capability-list">${capabilityHtml}</div>
+    </div>
+    <div class="metric-section">
+      <h3>推荐反馈</h3>
+      <div class="metric-line"><span class="metric-key">反馈事件</span><span class="metric-val">${escapeHtml(String(feedback.total_events || 0))}</span></div>
+      <div class="metric-line"><span class="metric-key">正反馈</span><span class="metric-val">${escapeHtml(String(feedback.positive_events || 0))}</span></div>
+      <div class="metric-line"><span class="metric-key">负反馈</span><span class="metric-val">${escapeHtml(String(feedback.negative_events || 0))}</span></div>
+    </div>
+    <div class="metric-section">
+      <h3>最近 Turn</h3>
+      ${recentTurnHtml}
+    </div>`;
+}
+
+function formatRate(value) {
+  const numeric = Number(value || 0);
+  return `${Math.round(numeric * 100)}%`;
 }
 
 function switchTab(tabName) {

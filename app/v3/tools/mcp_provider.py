@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from app.v3.config import Settings, get_settings
 from app.v3.models import CapabilityDescriptor, CapabilityKind, Observation, Product
+from app.v3.observability import ObservabilityStore
 from app.v3.registry import CapabilityRegistry, MCPProvider
 
 from .mcp_client import InProcessMCPTransport, MCPClient, MCPToolDefinition
@@ -85,12 +86,16 @@ def build_mock_mcp_tool_providers(
     settings: Settings | None = None,
     catalog: Sequence[Product] | None = None,
     server: MockMCPServer | None = None,
+    observability_store: ObservabilityStore | None = None,
 ) -> list[MCPToolProvider]:
     resolved_settings = settings or get_settings()
     if not resolved_settings.mcp_mock_enabled:
         return []
 
-    resolved_server = server or MockMCPServer(catalog=catalog)
+    resolved_server = server or MockMCPServer(
+        catalog=catalog,
+        observability_store=observability_store,
+    )
     client = MCPClient(transport=InProcessMCPTransport(resolved_server))
     return [
         MCPToolProvider(tool_definition=tool_definition, client=client)
@@ -104,12 +109,14 @@ def register_mock_mcp_tool_providers(
     settings: Settings | None = None,
     catalog: Sequence[Product] | None = None,
     server: MockMCPServer | None = None,
+    observability_store: ObservabilityStore | None = None,
 ) -> list[CapabilityDescriptor]:
     descriptors: list[CapabilityDescriptor] = []
     for provider in build_mock_mcp_tool_providers(
         settings=settings,
         catalog=catalog,
         server=server,
+        observability_store=observability_store,
     ):
         descriptors.append(registry.register(provider))
     return descriptors

@@ -8,7 +8,7 @@ from app.v3.agents.demo_responses import (
     V31_LITE_FINAL_OBSERVATION_ID,
 )
 from app.v3.config import Settings
-from app.v3.observability import install_observability
+from app.v3.observability import ObservabilityStore, install_observability
 from app.v3.prompts import PromptRegistry
 from app.v3.registry import CapabilityRegistry
 from app.v3.specialists import (
@@ -22,6 +22,7 @@ from app.v3.tools import register_mock_mcp_tool_providers, register_mock_tool_pr
 
 from .messages import router as messages_router
 from .middleware import install_trace_middleware
+from .observability import router as observability_router
 from .preferences import router as preferences_router
 from .sessions import SessionStore, router as sessions_router
 from .trace import router as trace_router
@@ -32,11 +33,16 @@ def install_v3_api(application: FastAPI, settings: Settings) -> None:
     registry = CapabilityRegistry()
     prompt_registry = PromptRegistry()
     session_store = SessionStore()
+    observability_store = ObservabilityStore()
     team = AgentTeam()
 
     register_mock_tool_providers(registry)
     if settings.mcp_mock_enabled:
-        register_mock_mcp_tool_providers(registry, settings=settings)
+        register_mock_mcp_tool_providers(
+            registry,
+            settings=settings,
+            observability_store=observability_store,
+        )
 
     specialists = (
         ShoppingBriefSpecialist(prompt_registry=prompt_registry),
@@ -93,6 +99,7 @@ def install_v3_api(application: FastAPI, settings: Settings) -> None:
     application.state.v3_registry = registry
     application.state.v3_prompt_registry = prompt_registry
     application.state.v3_session_store = session_store
+    application.state.v3_observability_store = observability_store
     application.state.v3_team = team
     application.state.v3_hook_bus = hook_bus
     application.state.v3_main_agent = main_agent
@@ -102,6 +109,7 @@ def install_v3_api(application: FastAPI, settings: Settings) -> None:
     application.include_router(messages_router)
     application.include_router(trace_router)
     application.include_router(preferences_router)
+    application.include_router(observability_router)
 
     async def close_v3_resources() -> None:
         await application.state.v3_main_agent.llm_client.aclose()

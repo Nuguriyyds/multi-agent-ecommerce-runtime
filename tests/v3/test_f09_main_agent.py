@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.v3.agents import LLMClient, MainAgent
+from app.v3.config import Settings
 from app.v3.models import CapabilityDescriptor, CapabilityKind, Observation, SessionState
 from app.v3.registry import CapabilityRegistry, ToolProvider
 
@@ -169,6 +170,7 @@ async def test_main_agent_forces_fallback_when_loop_reaches_max_steps() -> None:
     agent = MainAgent(
         registry=registry,
         llm_client=llm_client,
+        settings=Settings(max_steps=1),
     )
     session = make_session(
         session_id="session-loop-limit",
@@ -181,14 +183,14 @@ async def test_main_agent_forces_fallback_when_loop_reaches_max_steps() -> None:
     assert result.status == "fallback"
     assert result.action.kind == "fallback"
     assert result.action.reason == "loop_exhausted"
-    assert result.completed_steps == 8
-    assert len(tool_provider.calls) == 8
+    assert result.completed_steps == 1
+    assert len(tool_provider.calls) == 1
 
     trace = agent.trace_store.get("session-loop-limit", 1)
     assert trace is not None
     assert trace.terminal_state == "fallback"
     assert trace.fallback_reason == "runtime:loop_exhausted"
-    assert len(trace.decisions) == 8
+    assert len(trace.decisions) == 1
 
 
 @pytest.mark.asyncio

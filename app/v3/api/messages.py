@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from time import perf_counter
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import Field
@@ -55,6 +56,7 @@ async def post_message(
 
     trace_id = getattr(request.state, "trace_id", None)
     next_turn_number = record.state.turn_count + 1
+    turn_started_at = perf_counter()
 
     log_event(
         _LOGGER,
@@ -84,6 +86,7 @@ async def post_message(
         )
 
     turn_result = await agent.run_turn(record.state, payload.message)
+    turn_latency_ms = max(0, int(round((perf_counter() - turn_started_at) * 1000)))
     session_store.touch(session_id, now=utc_now())
     if record.state.turn_count >= settings.session_max_turns:
         session_store.mark_expired(
@@ -93,6 +96,14 @@ async def post_message(
         )
 
     request.state.response_trace_id = turn_result.trace_id
+    trace = agent.trace_store.get(session_id, turn_result.turn_number)
+    observability_store = getattr(request.app.state, "v3_observability_store", None)
+    if trace is not None and observability_store is not None:
+        observability_store.record_turn(
+            session_id,
+            trace,
+            latency_ms=turn_latency_ms,
+        )
     log_event(
         _LOGGER,
         "api.message.finished",
@@ -102,6 +113,7 @@ async def post_message(
         payload={
             "status": turn_result.status,
             "completed_steps": turn_result.completed_steps,
+            "turn_latency_ms": turn_latency_ms,
         },
     )
     return turn_result.model_dump(mode="json")
