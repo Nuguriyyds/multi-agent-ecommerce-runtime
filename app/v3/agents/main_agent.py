@@ -146,7 +146,9 @@ class MainAgent:
                 prompt=prompt,
                 context=context,
             )
-            decision = AgentDecision.model_validate_json(raw_output)
+            decision = AgentDecision.model_validate_json(
+                self._llm_client.normalize_decision_payload(raw_output)
+            )
         except LLMClientError as exc:
             self._logger.warning("MainAgent decision degraded due to LLM transport/mock failure: %s", exc)
             decision = self._fallback_decision(
@@ -155,7 +157,12 @@ class MainAgent:
                 rationale=f"LLM call failed: {exc}",
             )
         except (ValidationError, ValueError, TypeError) as exc:
-            self._logger.warning("MainAgent decision degraded due to invalid LLM payload: %s", exc)
+            raw_preview = self._safe_payload_preview(locals().get("raw_output"))
+            self._logger.warning(
+                "MainAgent decision degraded due to invalid LLM payload: %s preview=%s",
+                exc,
+                raw_preview,
+            )
             decision = self._fallback_decision(
                 reason="llm_invalid_response",
                 user_message="I need to stop here because the decision engine returned an invalid response.",
@@ -288,6 +295,15 @@ class MainAgent:
             next_task_label="fallback",
             continue_loop=False,
         )
+
+    @staticmethod
+    def _safe_payload_preview(raw_output: Any) -> str:
+        if not isinstance(raw_output, str):
+            return "<unavailable>"
+        normalized = " ".join(raw_output.strip().split())
+        if len(normalized) > 400:
+            return f"{normalized[:400]}..."
+        return normalized
 
 
 __all__ = ["MainAgent"]

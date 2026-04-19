@@ -126,6 +126,11 @@ class LLMClient:
         self._logger.info("LLM completion success model=%s", self._model)
         return content
 
+    def normalize_decision_payload(self, payload: str) -> str:
+        parsed = self._parse_json_like_payload(payload)
+        decision = self._extract_decision_mapping(parsed)
+        return json.dumps(decision, ensure_ascii=False)
+
     def _select_mock_key(self, context: TurnRuntimeContext) -> str:
         if not self._mock_responses:
             raise LLMClientError("mock_responses must be configured when OPENAI_API_KEY is empty")
@@ -208,6 +213,173 @@ class LLMClient:
             return "".join(parts).strip()
 
         raise LLMResponseFormatError("chat completion content has an unsupported shape")
+
+    @classmethod
+    def _parse_json_like_payload(cls, payload: str) -> Any:
+        candidate = payload.strip()
+        if not candidate:
+            raise ValueError("decision payload is empty")
+
+        for raw_candidate in (
+            candidate,
+            cls._strip_code_fence(candidate),
+            cls._extract_first_json_object(candidate),
+        ):
+            if not raw_candidate:
+                continue
+            try:
+                return cls._decode_nested_json(json.loads(raw_candidate))
+            except ValueError:
+                continue
+
+        stripped = cls._strip_code_fence(candidate)
+        embedded = cls._extract_first_json_object(stripped)
+        if embedded:
+            try:
+                return cls._decode_nested_json(json.loads(embedded))
+            except ValueError:
+                pass
+
+        raise ValueError("decision payload does not contain a valid JSON object")
+
+    @classmethod
+    def _extract_decision_mapping(cls, payload: Any) -> dict[str, Any]:
+        if isinstance(payload, Mapping):
+            match = cls._find_decision_mapping(payload)
+            if match is not None:
+                return cls._sanitize_decision_mapping(match)
+        raise ValueError("decision payload does not match the AgentDecision shape")
+
+    @classmethod
+    def _find_decision_mapping(cls, payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
+        if cls._looks_like_agent_decision(payload):
+            return payload
+
+        for key in ("decision", "agent_decision", "result", "response", "output", "data"):
+            candidate = payload.get(key)
+            parsed = cls._parse_nested_candidate(candidate)
+            if isinstance(parsed, Mapping):
+                match = cls._find_decision_mapping(parsed)
+                if match is not None:
+                    return match
+
+        if len(payload) == 1:
+            parsed = cls._parse_nested_candidate(next(iter(payload.values())))
+            if isinstance(parsed, Mapping):
+                match = cls._find_decision_mapping(parsed)
+                if match is not None:
+                    return match
+
+        return None
+
+    @staticmethod
+    def _looks_like_agent_decision(payload: Mapping[str, Any]) -> bool:
+        return "action" in payload and "rationale" in payload
+
+    @classmethod
+    def _parse_nested_candidate(cls, candidate: Any) -> Any:
+        if isinstance(candidate, str):
+            stripped = candidate.strip()
+            if stripped:
+                try:
+                    return cls._parse_json_like_payload(stripped)
+                except ValueError:
+                    return candidate
+        return candidate
+
+    @staticmethod
+    def _sanitize_decision_mapping(payload: Mapping[str, Any]) -> dict[str, Any]:
+        action = payload.get("action")
+        if not isinstance(action, Mapping):
+            raise ValueError("decision action must be an object")
+
+        kind = action.get("kind")
+        allowed_action_fields = {
+            "reply_to_user": {"kind", "message", "observation_ids"},
+            "ask_clarification": {"kind", "question", "missing_slots"},
+            "call_tool": {"kind", "capability_name", "arguments"},
+            "call_sub_agent": {"kind", "capability_name", "brief"},
+            "fallback": {"kind", "reason", "user_message"},
+        }
+        if kind not in allowed_action_fields:
+            raise ValueError(f"unsupported action kind: {kind!r}")
+
+        decision: dict[str, Any] = {
+            "action": {
+                key: value
+                for key, value in action.items()
+                if key in allowed_action_fields[kind]
+            },
+            "rationale": payload.get("rationale"),
+        }
+        for field in ("next_task_label", "continue_loop", "routing_metadata"):
+            if field in payload:
+                decision[field] = payload[field]
+        return decision
+
+    @staticmethod
+    def _strip_code_fence(payload: str) -> str:
+        candidate = payload.strip()
+        if not candidate.startswith("```"):
+            return candidate
+
+        lines = candidate.splitlines()
+        if not lines:
+            return candidate
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _extract_first_json_object(payload: str) -> str | None:
+        start_index: int | None = None
+        depth = 0
+        in_string = False
+        escaping = False
+
+        for index, char in enumerate(payload):
+            if start_index is None:
+                if char == "{":
+                    start_index = index
+                    depth = 1
+                continue
+
+            if in_string:
+                if escaping:
+                    escaping = False
+                elif char == "\\":
+                    escaping = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return payload[start_index : index + 1]
+
+        return None
+
+    @staticmethod
+    def _decode_nested_json(payload: Any) -> Any:
+        candidate = payload
+        for _ in range(2):
+            if not isinstance(candidate, str):
+                return candidate
+            stripped = candidate.strip()
+            if not stripped.startswith("{"):
+                return candidate
+            try:
+                candidate = json.loads(stripped)
+            except ValueError:
+                return candidate
+        return candidate
 
     @staticmethod
     def _budget_missing(context: TurnRuntimeContext) -> bool:

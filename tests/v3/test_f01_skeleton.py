@@ -28,7 +28,7 @@ def _clear_v3_env(monkeypatch) -> None:
 def test_settings_defaults(monkeypatch) -> None:
     _clear_v3_env(monkeypatch)
     get_settings.cache_clear()
-    settings = Settings()
+    settings = Settings(_env_file=None)
 
     assert settings.openai_api_key == ""
     assert settings.openai_base_url == "https://api.openai.com/v1"
@@ -74,14 +74,14 @@ def test_settings_read_ecov3_prefix_and_cache(monkeypatch) -> None:
 
 
 def test_create_app_exposes_health_and_settings() -> None:
-    settings = Settings(app_debug=True)
+    settings = Settings(app_debug=True, openai_api_key="", _env_file=None)
     test_app = create_app(settings)
     client = TestClient(test_app)
 
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "workspace": "v3"}
+    assert response.json() == {"status": "ok", "workspace": "v3", "llm_mode": "mock"}
     assert test_app.state.settings is settings
     assert test_app.debug is True
 
@@ -92,4 +92,8 @@ def test_module_app_health_contract() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "workspace": "v3"}
+    assert response.json() == {
+        "status": "ok",
+        "workspace": "v3",
+        "llm_mode": "remote" if app.state.settings.openai_api_key else "mock",
+    }

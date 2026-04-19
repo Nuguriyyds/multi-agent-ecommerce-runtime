@@ -26,6 +26,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "status": "ok",
             "workspace": "v3",
+            "llm_mode": "remote" if resolved_settings.openai_api_key else "mock",
         }
 
     if _WEB_DIR.is_dir():
