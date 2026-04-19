@@ -179,7 +179,7 @@ Hook **observer-only**:handler 修改 event 只记 warning 并丢弃变更;handl
 
 ## 扩展点
 
-### 加新场景(如"办公协同")
+### 加新场景
 
 1. 在 [app/v3/specialists/](../app/v3/specialists/) 新增 4 个领域 specialist(继承 `Specialist` 基类,每个注册一个 role prompt)
 2. 在 [app/v3/tools/](../app/v3/tools/) 新增工具 Provider(实现 `ToolProvider`)
