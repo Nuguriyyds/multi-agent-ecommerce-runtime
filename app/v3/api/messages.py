@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import Field
 
+from app.v3.memory import extract_and_store_preferences
 from app.v3.models.base import V3Model
 from app.v3.observability import log_event
 
@@ -52,14 +53,36 @@ async def post_message(
             },
         )
 
+    trace_id = getattr(request.state, "trace_id", None)
+    next_turn_number = record.state.turn_count + 1
+
     log_event(
         _LOGGER,
         "api.message.started",
-        trace_id=getattr(request.state, "trace_id", None),
+        trace_id=trace_id,
         session_id=session_id,
-        turn_number=record.state.turn_count + 1,
+        turn_number=next_turn_number,
         payload={"message_length": len(payload.message)},
     )
+
+    hook_bus = getattr(request.app.state, "v3_hook_bus", None)
+    newly_extracted = await extract_and_store_preferences(
+        record.state,
+        payload.message,
+        hook_bus=hook_bus,
+        trace_id=trace_id,
+        turn_number=next_turn_number,
+    )
+    if newly_extracted:
+        log_event(
+            _LOGGER,
+            "api.message.preferences_extracted",
+            trace_id=trace_id,
+            session_id=session_id,
+            turn_number=next_turn_number,
+            payload={"keys": list(newly_extracted.keys())},
+        )
+
     turn_result = await agent.run_turn(record.state, payload.message)
     session_store.touch(session_id, now=utc_now())
     if record.state.turn_count >= settings.session_max_turns:

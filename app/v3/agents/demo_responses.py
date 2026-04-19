@@ -8,16 +8,18 @@ Each key is the raw user message (the same normalization as the mock scenario
 selector in LLMClient._select_mock_key). The values are either a single
 AgentDecision-shaped dict (one-step turn) or a list of dicts (multi-step turn).
 
-These seeds intentionally mirror the 3 smoke scenarios in tests/v3/smoke/:
+These seeds intentionally mirror and extend the smoke scenarios in tests/v3/smoke/:
   - Scenario A (happy path, 2 turns)
   - Scenario B (multi-turn clarification, 3 turns)
   - Scenario C (business-boundary fallback, 1 turn)
+  - Scenario D (full specialist chain, 1 turn)
 """
 from __future__ import annotations
 
 from typing import Any
 
 HAPPY_TOOL_OBSERVATION_ID = "obs-111111111111"
+FULL_CHAIN_FINAL_OBSERVATION_ID = "obs-aaaaaaaaaaaa"
 
 
 DEMO_MOCK_RESPONSES: dict[str, Any] = {
@@ -125,7 +127,115 @@ DEMO_MOCK_RESPONSES: dict[str, Any] = {
         "next_task_label": "fallback",
         "continue_loop": False,
     },
+    # --- Scenario D: Full Specialist Chain ---
+    "完整演示：3000 左右通勤降噪耳机，不要 Beats，帮我给出最终推荐": [
+        {
+            "action": {
+                "kind": "call_sub_agent",
+                "capability_name": "shopping_brief_specialist",
+                "brief": {
+                    "brief_id": "demo-brief-1",
+                    "task_id": "demo-task-1",
+                    "role": "shopping_brief",
+                    "goal": "Extract a complete shopping brief for commute noise-canceling headphones.",
+                    "constraints": {
+                        "raw_user_need": "3000 左右通勤降噪耳机，不要 Beats",
+                        "budget_max": 3000,
+                        "category": "earphones",
+                        "scene": "commute",
+                        "exclude_brands": ["Beats"],
+                    },
+                    "allowed_capabilities": [],
+                },
+            },
+            "rationale": "Start with structured need extraction before searching candidates.",
+            "next_task_label": "extract_shopping_brief",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "call_sub_agent",
+                "capability_name": "candidate_analysis_specialist",
+                "brief": {
+                    "brief_id": "demo-brief-2",
+                    "task_id": "demo-task-2",
+                    "role": "candidate_analysis",
+                    "goal": "Search and analyze catalog-backed candidates for commute ANC headphones.",
+                    "constraints": {
+                        "query": "3000 左右 通勤 降噪耳机",
+                        "category": "earphones",
+                        "scene": "commute",
+                        "budget_max": 3000,
+                        "exclude_brands": ["Beats"],
+                        "limit": 4,
+                    },
+                    "allowed_capabilities": ["catalog_search"],
+                },
+            },
+            "rationale": "Use a specialist to turn the brief into catalog-backed candidates and fit reasons.",
+            "next_task_label": "analyze_candidates",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "call_sub_agent",
+                "capability_name": "comparison_specialist",
+                "brief": {
+                    "brief_id": "demo-brief-3",
+                    "task_id": "demo-task-3",
+                    "role": "comparison",
+                    "goal": "Compare the strongest candidates on commuter-relevant dimensions.",
+                    "constraints": {
+                        "skus": ["EAR-SON-WH1000XM5", "EAR-BOS-QCUH"],
+                        "dimensions": ["price", "battery", "noise_cancel", "weight"],
+                    },
+                    "allowed_capabilities": ["product_compare", "inventory_check"],
+                },
+            },
+            "rationale": "Compare the top candidates before producing a final recommendation.",
+            "next_task_label": "compare_shortlist",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "call_sub_agent",
+                "capability_name": "recommendation_rationale_specialist",
+                "brief": {
+                    "brief_id": "demo-brief-4",
+                    "task_id": "demo-task-4",
+                    "role": "recommendation_rationale",
+                    "goal": "Build evidence-cited rationales for the final pick.",
+                    "constraints": {
+                        "pick_sku": "EAR-SON-WH1000XM5",
+                        "query": "Sony WH-1000XM5 通勤 降噪",
+                    },
+                    "allowed_capabilities": ["rag_product_knowledge"],
+                },
+            },
+            "rationale": "Ask the rationale specialist to add traceable MCP-backed supporting evidence.",
+            "next_task_label": "build_rationale",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "reply_to_user",
+                "message": (
+                    "完整链路结论：Sony WH-1000XM5 是这次更稳的通勤降噪耳机选择。"
+                    "我先结构化了预算、场景和排除品牌，再做候选分析、双机对比，"
+                    "最后补充 MCP 商品知识形成可追溯推荐理由。"
+                ),
+                "observation_ids": [FULL_CHAIN_FINAL_OBSERVATION_ID],
+            },
+            "rationale": "The final recommendation is supported by the rationale specialist observation.",
+            "next_task_label": "reply_with_traceable_recommendation",
+            "continue_loop": False,
+        },
+    ],
 }
 
 
-__all__ = ["DEMO_MOCK_RESPONSES", "HAPPY_TOOL_OBSERVATION_ID"]
+__all__ = [
+    "DEMO_MOCK_RESPONSES",
+    "FULL_CHAIN_FINAL_OBSERVATION_ID",
+    "HAPPY_TOOL_OBSERVATION_ID",
+]

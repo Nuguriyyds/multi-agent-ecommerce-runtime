@@ -33,6 +33,7 @@
 - MCP 接入：`app/v3/tools/mcp_client.py` + `app/v3/tools/mcp_mock_server/`（V3.0 客户端 + 内置 mock server + RAG 风格工具）
 - 配置：`app/v3/config/settings.py:get_settings()`，环境变量前缀 `ECOV3_`
 - Hooks：`app/v3/hooks/hook_bus.py:HookBus`（所有 feature 直接 emit，不要私建事件系统）
+- 偏好档案：`app/v3/memory/preference_extractor.py` 是 `session_working_memory["confirmed_preferences"]` 和 `durable_user_memory` 裸 dict 的轻量 writer + 只读视图 + revoke 动作；**不是新的 memory 层**，只是现有两层 memory 的 API 投影。路由在 `app/v3/api/preferences.py`，UI 在右侧 tabs。
 
 ## 技术约束（所有后续 feature 必须遵守）
 

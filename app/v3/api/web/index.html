@@ -38,7 +38,7 @@
   main {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 420px;
+    grid-template-columns: 1fr 440px;
     min-height: 0;
   }
   .chat-pane {
@@ -156,28 +156,234 @@
     border-color: #0969da;
     color: #0969da;
   }
-  .trace-pane {
-    background: #fafbfc;
-    overflow-y: auto;
-    padding: 20px;
+  .demo-panel {
+    padding: 12px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e5e7eb;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
-  .trace-pane h2 {
+  .demo-panel .demo-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .demo-panel .demo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .demo-panel button {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .demo-panel button:hover:not(:disabled) {
+    border-color: #0969da;
+    color: #0969da;
+  }
+  .demo-panel button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .side-pane {
+    background: #fafbfc;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid #e5e7eb;
+    background: #ffffff;
+    flex-shrink: 0;
+  }
+  .tab-button {
+    flex: 1;
+    padding: 12px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.2px;
+  }
+  .tab-button:hover { color: #0969da; }
+  .tab-button.active {
+    color: #0969da;
+    border-bottom-color: #0969da;
+    background: #f0f7ff;
+  }
+  .tab-button .count-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 6px;
+    background: #e5e7eb;
+    color: #374151;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .tab-button.active .count-badge {
+    background: #0969da;
+    color: white;
+  }
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+  }
+  .tab-content.hidden { display: none; }
+  .tab-content h2 {
     font-size: 13px;
     font-weight: 600;
     margin: 0 0 12px 0;
     color: #1f2328;
     letter-spacing: 0.3px;
   }
-  .trace-pane .hint {
+  .tab-content .hint {
     font-size: 12px;
     color: #6b7280;
-    margin-bottom: 16px;
-    padding: 10px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
     background: #ffffff;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
-    line-height: 1.5;
+    line-height: 1.55;
   }
+  .tab-content .hint code {
+    background: #f3f4f6;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .pref-empty {
+    padding: 24px 12px;
+    text-align: center;
+    color: #9ca3af;
+    font-size: 12.5px;
+    line-height: 1.6;
+    background: #ffffff;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+  }
+  .pref-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .pref-entry .pref-label {
+    flex: 1;
+    min-width: 0;
+  }
+  .pref-entry .pref-key {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .pref-entry .pref-value {
+    font-size: 13px;
+    color: #1f2328;
+    word-break: break-all;
+  }
+  .pref-entry .pref-layer {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+    margin-left: 6px;
+  }
+  .pref-entry .pref-layer.session_working { background: #dbeafe; color: #1e40af; }
+  .pref-entry .pref-layer.durable_user { background: #fef3c7; color: #92400e; }
+  .pref-entry .pref-revoke {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    color: #dc2626;
+    padding: 4px 10px;
+    font-size: 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .pref-entry .pref-revoke:hover {
+    background: #fef2f2;
+    border-color: #dc2626;
+  }
+  .pref-entry .pref-revoke:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .pick-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .pick-card .pick-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .pick-card .pick-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #1f2328;
+  }
+  .pick-card .pick-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0969da;
+    white-space: nowrap;
+  }
+  .pick-card .pick-meta {
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-bottom: 6px;
+  }
+  .pick-card .pick-desc {
+    font-size: 12px;
+    color: #374151;
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+  .pick-card .pick-reason {
+    font-size: 11.5px;
+    color: #166534;
+    background: #f0fdf4;
+    padding: 5px 8px;
+    border-radius: 4px;
+    border: 1px solid #bbf7d0;
+  }
+
   .turn-card {
     background: #ffffff;
     border: 1px solid #e5e7eb;
@@ -237,7 +443,7 @@
 <body>
 <header>
   <h1>V3 Main-Agent Playground</h1>
-  <span class="sub">中心化多 Agent 电商导购</span>
+  <span class="sub">可审计动态 Agent Runtime · 电商导购验证场景</span>
   <span class="session-chip" id="sessionChip">连接中…</span>
 </header>
 <main>
@@ -249,15 +455,53 @@
       <span class="chip" data-text="帮我选个礼物">🎁 多轮澄清起手</span>
       <span class="chip" data-text="就这个了，帮我下单">🚫 业务边界 fallback</span>
     </div>
+    <div class="demo-panel">
+      <div class="demo-title">
+        <span>演示模式</span>
+        <span id="demoStatus">手动或一键跑固定脚本</span>
+      </div>
+      <div class="demo-actions">
+        <button data-demo="clarification">澄清链路</button>
+        <button data-demo="full">完整 specialist 推荐链路</button>
+        <button data-demo="fallback">边界 fallback</button>
+        <button data-demo="all">一键跑三条</button>
+      </div>
+    </div>
     <div class="input-area">
-      <textarea id="input" placeholder="和 Main Agent 对话,右栏会实时显示多步决策和 tool 调用…" rows="1"></textarea>
+      <textarea id="input" placeholder="和 Main Agent 对话,右栏会实时显示偏好档案 / 个性化推荐 / 决策链…" rows="1"></textarea>
       <button id="send">发送</button>
     </div>
   </section>
-  <aside class="trace-pane">
-    <h2>Turn Trace</h2>
-    <div class="hint">右栏展示 Main Agent 在每个 turn 的完整决策链:决策 → Gate 校验 → Tool / Sub-Agent 调用 → Observation → 终态。所有数据来自 <code>GET /api/v3/sessions/&lt;id&gt;/turns/&lt;n&gt;/trace</code>。</div>
-    <div id="traceArea"></div>
+  <aside class="side-pane">
+    <div class="tab-bar">
+      <button class="tab-button active" data-tab="preferences">
+        我的偏好<span class="count-badge" id="prefCount">0</span>
+      </button>
+      <button class="tab-button" data-tab="picks">
+        为你推荐<span class="count-badge" id="pickCount">0</span>
+      </button>
+      <button class="tab-button" data-tab="trace">Trace</button>
+    </div>
+    <div class="tab-content" id="tab-preferences">
+      <div class="hint">
+        对话中提到的预算 / 场景 / 品类 / 排斥品牌会被 <code>preference_extractor</code> 写入偏好档案,
+        <b>source=user_confirmed</b>。点 × 触发 <code>POST /preferences/revoke</code>,在 Trace 里可看到 memory_write decision=revoke。
+      </div>
+      <div id="prefList"></div>
+    </div>
+    <div class="tab-content hidden" id="tab-picks">
+      <div class="hint">
+        基于当前偏好档案调用 <code>catalog_search</code>,返回匹配度最高的 3 款。偏好变化(写入或撤销)后自动刷新。
+      </div>
+      <div id="pickList"></div>
+    </div>
+    <div class="tab-content hidden" id="tab-trace">
+      <div class="hint">
+        展示 Main Agent 在每个 turn 的完整决策链:决策 → Gate 校验 → Tool / Sub-Agent 调用 → Observation → 终态。
+        来自 <code>GET /api/v3/sessions/&lt;id&gt;/turns/&lt;n&gt;/trace</code>。
+      </div>
+      <div id="traceArea"></div>
+    </div>
   </aside>
 </main>
 <footer>
@@ -271,9 +515,27 @@ const traceEl = document.getElementById('traceArea');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('send');
 const sessionChip = document.getElementById('sessionChip');
+const demoStatus = document.getElementById('demoStatus');
+const prefListEl = document.getElementById('prefList');
+const pickListEl = document.getElementById('pickList');
+const prefCountEl = document.getElementById('prefCount');
+const pickCountEl = document.getElementById('pickCount');
 
 let sessionId = null;
 let turnCount = 0;
+let demoRunning = false;
+
+const DEMO_SCRIPTS = {
+  clarification: ['帮我选个礼物', '送女朋友的，生日礼物'],
+  full: ['完整演示：3000 左右通勤降噪耳机，不要 Beats，帮我给出最终推荐'],
+  fallback: ['就这个了，帮我下单'],
+  all: [
+    '帮我选个礼物',
+    '送女朋友的，生日礼物',
+    '完整演示：3000 左右通勤降噪耳机，不要 Beats，帮我给出最终推荐',
+    '就这个了，帮我下单'
+  ]
+};
 
 async function initSession() {
   try {
@@ -287,9 +549,10 @@ async function initSession() {
     sessionId = data.session_id;
     sessionChip.textContent = sessionId;
     appendAssistantMessage(
-      '你好!我是 V3 Main Agent,专注 1500-3000 元价位的通勤 / 降噪耳机导购。你可以说预算、使用场景或品牌偏好,我会多步推理后给出候选和理由。',
+      '你好!我是 V3 Main Agent。对话中说的预算 / 场景 / 品类 / 排斥品牌会实时写入右侧"我的偏好"档案,"为你推荐"会基于档案挑 3 款匹配的。所有 memory 写入进 trace,可逐条撤销。',
       'reply'
     );
+    await refreshPreferencesAndPicks();
   } catch (e) {
     sessionChip.textContent = '连接失败';
     appendSystemMessage(`Session 创建失败: ${e.message}`);
@@ -350,12 +613,42 @@ async function sendMessage(text) {
     turnCount = result.turn_number;
     appendAssistantMessage(result.message, result.status);
     await loadTrace(turnCount);
+    await refreshPreferencesAndPicks();
   } catch (e) {
     appendSystemMessage(`请求失败: ${e.message}`);
   } finally {
     sendBtn.disabled = false;
     sendBtn.textContent = '发送';
   }
+}
+
+async function runDemo(name) {
+  const messages = DEMO_SCRIPTS[name] || [];
+  if (!messages.length || demoRunning) return;
+  demoRunning = true;
+  setControlsDisabled(true);
+  demoStatus.textContent = `运行中: ${name}`;
+  try {
+    for (const message of messages) {
+      await sendMessage(message);
+      await sleep(250);
+    }
+    demoStatus.textContent = `完成: ${name}`;
+  } finally {
+    demoRunning = false;
+    setControlsDisabled(false);
+  }
+}
+
+function setControlsDisabled(disabled) {
+  sendBtn.disabled = disabled;
+  document.querySelectorAll('[data-demo]').forEach(button => {
+    button.disabled = disabled;
+  });
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function loadTrace(turn) {
@@ -421,6 +714,126 @@ function prependTraceCard(turn, trace) {
   traceEl.insertBefore(card, traceEl.firstChild);
 }
 
+async function refreshPreferencesAndPicks() {
+  if (!sessionId) return;
+  await Promise.all([loadPreferences(), loadPicks()]);
+}
+
+async function loadPreferences() {
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions/${sessionId}/preferences`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderPreferences(data.entries || []);
+  } catch (e) {
+    console.error('loadPreferences failed', e);
+  }
+}
+
+function renderPreferences(entries) {
+  prefCountEl.textContent = entries.length;
+  if (!entries.length) {
+    prefListEl.innerHTML = `
+      <div class="pref-empty">
+        还没有偏好条目。<br>
+        在对话中说 <b>预算</b> / <b>品类</b> / <b>场景</b> / <b>不要某品牌</b>,档案会实时投影到这里。
+      </div>`;
+    return;
+  }
+
+  const html = entries.map(entry => {
+    const valueDisplay = formatPrefValue(entry.key, entry.value);
+    return `
+      <div class="pref-entry">
+        <div class="pref-label">
+          <span class="pref-key">${escapeHtml(entry.key)}<span class="pref-layer ${escapeHtml(entry.layer)}">${escapeHtml(entry.layer)}</span></span>
+          <span class="pref-value">${escapeHtml(valueDisplay)}</span>
+        </div>
+        <button class="pref-revoke" data-key="${escapeHtml(entry.key)}" title="撤销这条偏好">× 撤销</button>
+      </div>`;
+  }).join('');
+  prefListEl.innerHTML = html;
+
+  prefListEl.querySelectorAll('.pref-revoke').forEach(button => {
+    button.addEventListener('click', () => revokePreference(button.dataset.key, button));
+  });
+}
+
+function formatPrefValue(key, value) {
+  if (value == null) return '—';
+  if (typeof value === 'object') {
+    if (key === 'budget') {
+      const parts = [];
+      if (value.min != null) parts.push(`min ${value.min}`);
+      if (value.max != null) parts.push(`max ${value.max}`);
+      if (value.currency) parts.push(value.currency);
+      return parts.join(' / ') || JSON.stringify(value);
+    }
+    if (Array.isArray(value)) return value.join(', ');
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+async function revokePreference(key, buttonEl) {
+  if (!sessionId || !key) return;
+  buttonEl.disabled = true;
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions/${sessionId}/preferences/revoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, reason: 'UI 手动撤销' })
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${err}`);
+    }
+    await refreshPreferencesAndPicks();
+  } catch (e) {
+    appendSystemMessage(`撤销 "${key}" 失败: ${e.message}`);
+    buttonEl.disabled = false;
+  }
+}
+
+async function loadPicks() {
+  try {
+    const resp = await fetch(`${API_BASE}/api/v3/sessions/${sessionId}/personalized_picks`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderPicks(data.picks || [], data.hint);
+  } catch (e) {
+    console.error('loadPicks failed', e);
+  }
+}
+
+function renderPicks(picks, hint) {
+  pickCountEl.textContent = picks.length;
+  if (!picks.length) {
+    pickListEl.innerHTML = `
+      <div class="pref-empty">${escapeHtml(hint || '没有匹配的商品,试试调整偏好。')}</div>`;
+    return;
+  }
+  pickListEl.innerHTML = picks.map(pick => `
+    <div class="pick-card">
+      <div class="pick-header">
+        <span class="pick-name">${escapeHtml(pick.name)}</span>
+        <span class="pick-price">¥${escapeHtml(String(pick.price))}</span>
+      </div>
+      <div class="pick-meta">${escapeHtml(pick.brand)} · ${escapeHtml(pick.category)} · 评分 ${escapeHtml(String(pick.rating))}</div>
+      <div class="pick-desc">${escapeHtml(pick.description || '')}</div>
+      <div class="pick-reason">💡 ${escapeHtml(pick.match_reason)}</div>
+    </div>`).join('');
+}
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-content').forEach(content => {
+    content.classList.toggle('hidden', content.id !== `tab-${tabName}`);
+  });
+}
+
 function escapeHtml(str) {
   if (str == null) return '';
   return String(str)
@@ -438,6 +851,12 @@ inputEl.addEventListener('keydown', (e) => {
 });
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => sendMessage(chip.dataset.text));
+});
+document.querySelectorAll('[data-demo]').forEach(button => {
+  button.addEventListener('click', () => runDemo(button.dataset.demo));
+});
+document.querySelectorAll('.tab-button').forEach(button => {
+  button.addEventListener('click', () => switchTab(button.dataset.tab));
 });
 
 initSession();

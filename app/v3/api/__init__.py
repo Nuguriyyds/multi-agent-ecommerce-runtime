@@ -19,6 +19,7 @@ from app.v3.tools import register_mock_mcp_tool_providers, register_mock_tool_pr
 
 from .messages import router as messages_router
 from .middleware import install_trace_middleware
+from .preferences import router as preferences_router
 from .sessions import SessionStore, router as sessions_router
 from .trace import router as trace_router
 
@@ -66,6 +67,21 @@ def install_v3_api(application: FastAPI, settings: Settings) -> None:
         CatalogSearchProvider.invoke.__globals__["uuid4"] = (
             lambda: UUID("11111111-1111-1111-1111-111111111111")
         )
+        # Demo-mode only: pin specialist observation UUIDs so the full
+        # specialist-chain mock can end with a hardening-valid reply.
+        # The final UUID is intentionally repeated because demo users may run
+        # the full chain multiple times in one process.
+        specialist_uuid_counter = {"value": 0}
+
+        def next_demo_specialist_uuid() -> UUID:
+            specialist_uuid_counter["value"] += 1
+            if specialist_uuid_counter["value"] % 4 == 0:
+                return UUID("aaaaaaaa-aaaa-0000-0000-000000000000")
+            return UUID(f"00000000-0000-0000-0000-{specialist_uuid_counter['value']:012d}")
+
+        from app.v3.specialists.base import Specialist
+
+        Specialist.build_observation.__globals__["uuid4"] = next_demo_specialist_uuid
 
     application.state.v3_registry = registry
     application.state.v3_prompt_registry = prompt_registry
@@ -78,6 +94,7 @@ def install_v3_api(application: FastAPI, settings: Settings) -> None:
     application.include_router(sessions_router)
     application.include_router(messages_router)
     application.include_router(trace_router)
+    application.include_router(preferences_router)
 
     async def close_v3_resources() -> None:
         await application.state.v3_main_agent.llm_client.aclose()
