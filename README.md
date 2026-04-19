@@ -43,6 +43,21 @@ graph TB
 - fallback 是一等运行时语义，不把越界请求和校验失败继续交给 LLM 兜底
 - Memory 写入带 gate，避免把推断值升级成稳定用户事实
 
+## V3.1 Lite 已实现能力
+
+当前分支没有改变 V3.0 的串行主循环，也没有把受控 fan-out runtime 伪装成已完成能力。V3.1 Lite 的目标是先把下一阶段推荐闭环需要的能力注册完整，让 Main Agent 可以在同一套 CapabilityRegistry 中看到并调用这些能力：
+
+| 能力 | 类型 | 作用 |
+|---|---|---|
+| `catalog_search` | 本地工具 | 商品查库 / 商品召回 |
+| `inventory_check` | 本地工具 | 查询 SKU 库存状态 |
+| `product_compare` | 本地工具 | 商品维度对比 |
+| `rag_product_knowledge` | MCP 工具 | MCP 风格商品知识召回 / RAG |
+| `preference_profile_update` | 本地工具 | 生成可审计的显式偏好状态更新建议，不直接写 durable memory |
+| `marketing_copy_generate` | 本地工具 | 基于商品和偏好快照生成首页推荐位 / 广告位文案 |
+
+内置 demo 输入 `V3.1 演示：根据我的通勤耳机偏好，召回商品、查库存、生成首页推荐文案` 会串行调用上述能力，并在 Trace 中展示完整 invocation 链路。真正的受控 fan-out、gather 和树形 trace 仍保留在 V3.1 正式路线图中。
+
 ## 快速开始
 
 下面示例使用 Windows PowerShell；如果你在 macOS / Linux 上运行，请将 `.\.venv\Scripts\python.exe` 替换为 `.venv/bin/python`。
@@ -87,6 +102,7 @@ If `ECOV3_OPENAI_API_KEY` is empty, the app installs built-in mock responses so 
 | Clarification | `给朋友挑礼物` | Main Agent asks for missing constraints before acting |
 | Fallback | `帮我下单` | HardeningGate blocks out-of-scope business actions |
 | Preference Profile | Mention budget / scene / excluded brands in chat | Extracted preferences are projected to the side panel and can be revoked |
+| V3.1 Lite | `V3.1 演示：根据我的通勤耳机偏好，召回商品、查库存、生成首页推荐文案` | Tool/MCP capability chain for recall, inventory, RAG, preference-state proposal and homepage copy |
 
 ## API 概览
 

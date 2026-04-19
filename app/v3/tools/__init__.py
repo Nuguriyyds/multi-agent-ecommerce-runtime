@@ -9,6 +9,7 @@ from app.v3.registry import CapabilityRegistry, ToolProvider
 
 from .catalog_search import CatalogSearchProvider, catalog_search
 from .inventory_check import InventoryCheckProvider, inventory_check
+from .marketing_copy_generate import MarketingCopyGenerateProvider, marketing_copy_generate
 from .mcp_client import InProcessMCPTransport, MCPClient, MCPToolCallResult, MCPToolDefinition
 from .mcp_mock_server import MockMCPServer, build_knowledge_base, search_product_knowledge
 from .mcp_provider import (
@@ -17,6 +18,7 @@ from .mcp_provider import (
     register_mock_mcp_tool_providers,
 )
 from .mcp_types import MCPContentBlock
+from .preference_profile_update import PreferenceProfileUpdateProvider, preference_profile_update
 from .product_compare import ProductCompareProvider, product_compare
 from .seed_data import get_seed_catalog, seed_counts
 
@@ -26,6 +28,8 @@ def build_mock_tool_providers(*, catalog: Sequence[Product] | None = None) -> li
         CatalogSearchProvider(catalog=catalog),
         InventoryCheckProvider(catalog=catalog),
         ProductCompareProvider(catalog=catalog),
+        PreferenceProfileUpdateProvider(),
+        MarketingCopyGenerateProvider(),
     ]
 
 
@@ -44,12 +48,14 @@ __all__ = [
     "CatalogSearchProvider",
     "InProcessMCPTransport",
     "InventoryCheckProvider",
+    "MarketingCopyGenerateProvider",
     "MCPClient",
     "MCPContentBlock",
     "MCPToolCallResult",
     "MCPToolDefinition",
     "MCPToolProvider",
     "MockMCPServer",
+    "PreferenceProfileUpdateProvider",
     "ProductCompareProvider",
     "build_knowledge_base",
     "build_mock_mcp_tool_providers",
@@ -57,6 +63,8 @@ __all__ = [
     "catalog_search",
     "get_seed_catalog",
     "inventory_check",
+    "marketing_copy_generate",
+    "preference_profile_update",
     "product_compare",
     "register_mock_mcp_tool_providers",
     "register_mock_tool_providers",

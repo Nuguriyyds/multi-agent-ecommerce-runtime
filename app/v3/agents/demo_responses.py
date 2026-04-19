@@ -13,6 +13,7 @@ These seeds intentionally mirror and extend the smoke scenarios in tests/v3/smok
   - Scenario B (multi-turn clarification, 3 turns)
   - Scenario C (business-boundary fallback, 1 turn)
   - Scenario D (full specialist chain, 1 turn)
+  - Scenario E (V3.1 Lite capability chain, 1 turn)
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from typing import Any
 
 HAPPY_TOOL_OBSERVATION_ID = "obs-111111111111"
 FULL_CHAIN_FINAL_OBSERVATION_ID = "obs-aaaaaaaaaaaa"
+V31_LITE_FINAL_OBSERVATION_ID = "obs-bbbbbbbbbbbb"
 
 
 DEMO_MOCK_RESPONSES: dict[str, Any] = {
@@ -231,6 +233,106 @@ DEMO_MOCK_RESPONSES: dict[str, Any] = {
             "continue_loop": False,
         },
     ],
+    # --- Scenario E: V3.1 Lite Capability Chain ---
+    "V3.1 演示：根据我的通勤耳机偏好，召回商品、查库存、生成首页推荐文案": [
+        {
+            "action": {
+                "kind": "call_tool",
+                "capability_name": "catalog_search",
+                "arguments": {
+                    "query": "通勤 降噪耳机",
+                    "filters": {
+                        "category": "earphones",
+                        "scene": "commute",
+                        "price_max": 3000,
+                        "limit": 3,
+                    },
+                },
+            },
+            "rationale": "First recall candidate products that fit the commute earphone preference.",
+            "next_task_label": "recall_products",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "call_tool",
+                "capability_name": "inventory_check",
+                "arguments": {
+                    "sku": "EAR-SON-WH1000XM5",
+                },
+            },
+            "rationale": "Check whether the primary candidate is still available before generating copy.",
+            "next_task_label": "check_inventory",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "call_tool",
+                "capability_name": "rag_product_knowledge",
+                "arguments": {
+                    "query": "Sony WH-1000XM5 通勤 降噪 卖点",
+                    "limit": 3,
+                },
+            },
+            "rationale": "Pull MCP-backed product knowledge for traceable selling points.",
+            "next_task_label": "retrieve_rag_evidence",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "call_tool",
+                "capability_name": "preference_profile_update",
+                "arguments": {
+                    "preferences": {
+                        "scene": "commute",
+                        "category": "earphones",
+                        "budget": {"max": 3000, "currency": "CNY"},
+                    },
+                    "feedback_signal": "explicit_confirmed",
+                    "context": {"entry": "home_recommendation_card"},
+                },
+            },
+            "rationale": "Prepare an auditable preference-state proposal from the confirmed constraints.",
+            "next_task_label": "update_preference_state",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "call_tool",
+                "capability_name": "marketing_copy_generate",
+                "arguments": {
+                    "product": {
+                        "sku": "EAR-SON-WH1000XM5",
+                        "name": "Sony WH-1000XM5",
+                        "brand": "Sony",
+                        "price": 2899,
+                    },
+                    "preferences": {
+                        "scene": "commute",
+                        "category": "earphones",
+                        "budget": {"max": 3000, "currency": "CNY"},
+                    },
+                    "placement": "home_recommendation_card",
+                },
+            },
+            "rationale": "Generate homepage recommendation copy from the selected product and current preferences.",
+            "next_task_label": "generate_home_copy",
+            "continue_loop": True,
+        },
+        {
+            "action": {
+                "kind": "reply_to_user",
+                "message": (
+                    "V3.1 Lite 已串联完成商品召回、库存校验、MCP 知识召回、偏好状态更新建议和首页推荐文案生成。"
+                    "当前推荐主卡仍是 Sony WH-1000XM5，并且文案能力已经可以为首页推荐位生成可追溯草稿。"
+                ),
+                "observation_ids": [V31_LITE_FINAL_OBSERVATION_ID],
+            },
+            "rationale": "The final reply is grounded in the generated homepage copy observation.",
+            "next_task_label": "reply_with_v31_lite_summary",
+            "continue_loop": False,
+        },
+    ],
 }
 
 
@@ -238,4 +340,5 @@ __all__ = [
     "DEMO_MOCK_RESPONSES",
     "FULL_CHAIN_FINAL_OBSERVATION_ID",
     "HAPPY_TOOL_OBSERVATION_ID",
+    "V31_LITE_FINAL_OBSERVATION_ID",
 ]

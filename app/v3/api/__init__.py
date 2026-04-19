@@ -3,7 +3,10 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from app.v3.agents import MainAgent
-from app.v3.agents.demo_responses import DEMO_MOCK_RESPONSES
+from app.v3.agents.demo_responses import (
+    DEMO_MOCK_RESPONSES,
+    V31_LITE_FINAL_OBSERVATION_ID,
+)
 from app.v3.config import Settings
 from app.v3.observability import install_observability
 from app.v3.prompts import PromptRegistry
@@ -63,9 +66,13 @@ def install_v3_api(application: FastAPI, settings: Settings) -> None:
         from uuid import UUID
 
         from app.v3.tools.catalog_search import CatalogSearchProvider
+        from app.v3.tools.marketing_copy_generate import MarketingCopyGenerateProvider
 
         CatalogSearchProvider.invoke.__globals__["uuid4"] = (
             lambda: UUID("11111111-1111-1111-1111-111111111111")
+        )
+        MarketingCopyGenerateProvider.invoke.__globals__["uuid4"] = (
+            lambda: UUID("bbbbbbbb-bbbb-0000-0000-000000000000")
         )
         # Demo-mode only: pin specialist observation UUIDs so the full
         # specialist-chain mock can end with a hardening-valid reply.

@@ -8,10 +8,12 @@ from .scenario_c_fallback import test_scenario_c_falls_back_for_checkout_request
 from .scenario_d_full_specialist_chain import (
     test_scenario_d_full_specialist_chain_records_sub_agent_trace,
 )
+from .scenario_e_v31_lite import test_scenario_e_v31_lite_records_tool_chain_trace
 
 __all__ = [
     "test_scenario_a_happy_path_reaches_recommendation_in_two_turns",
     "test_scenario_b_stays_in_multi_turn_clarification_until_direction_is_confirmed",
     "test_scenario_c_falls_back_for_checkout_request",
     "test_scenario_d_full_specialist_chain_records_sub_agent_trace",
+    "test_scenario_e_v31_lite_records_tool_chain_trace",
 ]

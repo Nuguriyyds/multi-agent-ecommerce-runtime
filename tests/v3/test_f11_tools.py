@@ -8,9 +8,13 @@ from app.v3.registry import CapabilityRegistry
 from app.v3.tools import (
     CatalogSearchProvider,
     InventoryCheckProvider,
+    MarketingCopyGenerateProvider,
+    PreferenceProfileUpdateProvider,
     ProductCompareProvider,
     catalog_search,
     get_seed_catalog,
+    marketing_copy_generate,
+    preference_profile_update,
     register_mock_tool_providers,
     seed_counts,
 )
@@ -120,4 +124,61 @@ def test_seed_catalog_covers_reference_dialogues_and_tools_register_with_registr
         "catalog_search",
         "inventory_check",
         "product_compare",
+        "preference_profile_update",
+        "marketing_copy_generate",
     ]
+
+
+@pytest.mark.asyncio
+async def test_preference_profile_update_provider_returns_session_scoped_auditable_payload() -> None:
+    provider = PreferenceProfileUpdateProvider()
+
+    observation = await provider.invoke(
+        {
+            "preferences": {
+                "scene": "commute",
+                "budget": {"max": 3000, "currency": "CNY"},
+            },
+            "feedback_signal": "interested",
+            "context": {"placement": "home_recommendation_card"},
+        }
+    )
+
+    assert observation.source == "preference_profile_update"
+    assert observation.evidence_source == "tool:preference_profile_update"
+    assert observation.payload["write_policy"] == "requires_user_confirmation"
+    assert len(observation.payload["profile_updates"]) == 2
+    assert "durable memory" in " ".join(observation.payload["audit_notes"]).lower()
+
+    direct = preference_profile_update(
+        preferences={"scene": "commute"},
+        feedback_signal="explicit_confirmed",
+    )
+    assert direct["write_policy"] == "session_only"
+
+
+@pytest.mark.asyncio
+async def test_marketing_copy_generate_provider_returns_structured_copy() -> None:
+    provider = MarketingCopyGenerateProvider()
+    product = get_seed_catalog()[0].model_dump(mode="json")
+
+    observation = await provider.invoke(
+        {
+            "product": product,
+            "preferences": {"scene": "commute", "budget": {"max": 3000}},
+            "placement": "home_recommendation_card",
+        }
+    )
+
+    assert observation.source == "marketing_copy_generate"
+    assert observation.evidence_source == "tool:marketing_copy_generate"
+    assert observation.payload["placement"] == "home_recommendation_card"
+    assert observation.payload["headline"]
+    assert observation.payload["body"]
+    assert observation.payload["cta"] == "查看推荐"
+
+    direct = marketing_copy_generate(
+        product=product,
+        preferences={"scene": "commute"},
+    )
+    assert "placement:home_recommendation_card" in direct["evidence"]
